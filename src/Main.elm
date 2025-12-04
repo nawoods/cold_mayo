@@ -9,12 +9,13 @@ import Svg as S
 import Svg.Attributes as SA
 import Element as E
 import Element.Events as EE
+import Element.Input as EI
 import Element.Font as Font
 
 import Dropdown exposing (Dropdown, OutMsg(..), Placement(..))
 
-import PremierePoll
-import PremierePoll.Data
+import PremierePoll as Poll
+import PremierePoll.Data as PollData
 
 -- MAIN
 
@@ -28,8 +29,10 @@ main =
 
 type alias Model =
   { selectedPlayer : Maybe String
+  , selectedDiscipline : Maybe Poll.Discipline
+  , selectedYearMonth : Maybe (Int, Int)
   , playerDropdown : Dropdown String
-  , ballots : List PremierePoll.Ballot
+  , premierePoll : Maybe Poll.PremirePoll
   , mouseoverBar : Maybe Int
   }
 
@@ -39,13 +42,12 @@ init _ =
   (
     { selectedPlayer = Nothing
     , mouseoverBar = Nothing
-    , ballots = PremierePoll.Data.rawBallotData |> PremierePoll.parseBallotData
+    , selectedDiscipline = Nothing
+    , selectedYearMonth = Nothing
+    , premierePoll = Nothing
     , playerDropdown = Dropdown.init
         |> Dropdown.id "player-dropdown"
         |> Dropdown.inputType Dropdown.TextField
-        |> Dropdown.stringOptions (PremierePoll.Data.rawBallotData 
-          |> PremierePoll.parseBallotData 
-          |> PremierePoll.getPlayerNames)
         |> Dropdown.filterType Dropdown.StartsWithThenContains
     }
     , Cmd.none
@@ -60,6 +62,9 @@ type Msg =
   PlayerDropdownMsg (Dropdown.Msg String)
   | GraphBarMouseEnterMsg Int
   | GraphBarMouseLeaveMsg
+  | DisciplineSelectMsg Poll.Discipline
+  | YearMonthSelectMsg (Int, Int)
+  | ClearSelections
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model = 
@@ -86,6 +91,43 @@ update msg model =
       ( { model | mouseoverBar = Just bar }, Cmd.none )
     GraphBarMouseLeaveMsg ->
       ( { model | mouseoverBar = Nothing }, Cmd.none )
+    DisciplineSelectMsg discipline ->
+      ( { model | selectedDiscipline = Just discipline }, Cmd.none )
+    YearMonthSelectMsg ym ->
+      ( case model.selectedDiscipline of
+          Just discipline ->
+            let
+              premierePoll =
+                PollData.polls
+                |> List.filter 
+                    (\poll -> poll.yearMonth == ym && poll.discipline == discipline)
+                |> List.head
+            in
+            { model
+              | selectedYearMonth = Just ym
+              , premierePoll = premierePoll
+              , playerDropdown =
+                  case premierePoll of 
+                    Just poll ->
+                      model.playerDropdown
+                        |> Dropdown.stringOptions 
+                          (poll.ballots |> Poll.getPlayerNames)
+                    Nothing ->
+                      model.playerDropdown
+            }
+          Nothing ->
+            { model | selectedYearMonth = Just ym }
+      , Cmd.none 
+      )
+    ClearSelections ->
+      ( { model
+            | selectedDiscipline = Nothing
+            , selectedPlayer = Nothing
+            , selectedYearMonth = Nothing
+            , premierePoll = Nothing
+        }
+      , Cmd.none
+      )
                     
           
     
@@ -127,29 +169,137 @@ body model =
           , E.padding 40 
           , Font.size 18
           ]
-          [ E.column
-            []
-            [ E.el [Font.size 24] <| E.text "Cold Mayo"
-            , E.el [Font.size 16] <| E.text "A delicious plant-based spread for Nestris enthusiasts"
-
-            ]
-          , playerDropdown model
-          , voteChart model
+          [ title
+          , content model
           ]
-       , E.el 
-         [ E.alignBottom
-         , E.alignRight 
-         , E.padding 10
-         , Font.size 16
-         ] 
-         <| E.paragraph 
-           [] 
-           [ E.text "Put together by Nick \"arbaro\" Woods of NES Tetris fame. View the source code "
-           , E.link [ cornflower ] { url = "https://github.com/nawoods/cold_mayo", label = E.text "here" }
-           , E.text "."
-           ]
+      , footer
       ]
     )
+
+title : E.Element msg
+title =
+  E.column
+  []
+  [ E.el [Font.size 24] <| E.text "Cold Mayo"
+  , E.el [Font.size 16] <| E.text "A delicious plant-based spread for Nestris enthusiasts"
+  ]
+
+footer : E.Element msg
+footer =
+  E.el 
+  [ E.alignBottom
+  , E.alignRight 
+  , E.padding 10
+  , Font.size 16
+  ] 
+  <| E.paragraph 
+    [] 
+    [ E.text "Put together by Nick \"arbaro\" Woods of NES Tetris fame. View the source code "
+    , E.link [ cornflower ] { url = "https://github.com/nawoods/cold_mayo", label = E.text "here" }
+    , E.text "."
+    ]
+
+content : Model -> E.Element Msg
+content model =
+  case (model.selectedDiscipline, model.selectedYearMonth) of
+    (Nothing, _) ->
+      disciplineButtonRow
+    (Just _, Nothing) ->
+      E.column
+        [ E.spacing 20 ]
+        [ disciplineButtonRow
+        , yearMonthButtonRow model
+        ]
+    _ ->
+      case model.premierePoll of
+        Just _ ->
+          E.column
+            [ E.spacing 30 ]
+            [ pollHeading model
+            , playerDropdown model
+            , voteChart model
+            , case model.mouseoverBar of
+                Nothing ->
+                  EI.button
+                  [ E.alignRight ]
+                  { onPress = Just ClearSelections
+                  , label = E.text "Go again ->"
+                  }
+                _ ->
+                  E.none
+          ]
+        _ ->
+          E.column
+            [ E.spacing 20 ]
+            [ disciplineButtonRow
+            , yearMonthButtonRow model
+            , E.text "No poll found"
+            ]
+
+pollHeading : Model -> E.Element msg
+pollHeading model =
+  case (model.selectedYearMonth, model.selectedDiscipline) of
+    (Just yearMonth, Just discipline) ->
+      let 
+        yearMonthText = 
+          Maybe.withDefault "?" (Poll.longYearMonthString yearMonth)
+      in
+      E.text
+        (  yearMonthText
+        ++ " "
+        ++ Poll.disciplineString discipline
+        ++ " Poll"
+        )
+    _ ->
+      E.none
+
+
+disciplineButtonRow : E.Element Msg
+disciplineButtonRow =
+  E.row
+  [ E.spacing 20 ]
+  ( [Poll.Open, Poll.Das, Poll.Tap]
+      |> List.map (\d -> disciplineButton d (Poll.disciplineString d))
+      |> List.intersperse (E.text "|")
+  )
+
+disciplineButton : Poll.Discipline -> String -> E.Element Msg
+disciplineButton discipline label =
+  EI.button
+  []
+  { onPress = Just (DisciplineSelectMsg discipline)
+  , label = E.text label
+  }
+
+
+yearMonthButtonRow : Model -> E.Element Msg
+yearMonthButtonRow model =
+  E.wrappedRow
+  [ E.spacing 20 ]
+  ( PollData.polls
+    |> List.filter (\poll -> Just poll.discipline == model.selectedDiscipline)
+    |> List.map .yearMonth
+    |> List.map yearMonthButton
+    |> List.intersperse (E.text "|")
+  )
+  
+
+yearMonthButton : (Int, Int) -> E.Element Msg
+yearMonthButton ym =
+  let
+    monthText = Poll.longYearMonthString ym
+    label =
+      case monthText of
+        Just a ->
+          a
+        Nothing ->
+         "?"
+  in
+  EI.button
+  []
+  { onPress = Just (YearMonthSelectMsg ym)
+  , label = E.text label
+  }
 
 cornflower : E.Attr decorative msg
 cornflower = Font.color (E.rgb255 100 149 237)
@@ -188,11 +338,11 @@ graphBar model col ht =
 
 graphBarTooltip : Model -> E.Element msg
 graphBarTooltip model =
-  case (model.mouseoverBar, model.selectedPlayer) of
-      (Just x, Just p) ->
+  case (model.mouseoverBar, model.selectedPlayer, model.premierePoll) of
+      (Just x, Just p, Just poll) ->
         let
-          voters = model.ballots
-            |> PremierePoll.collectPlayerVotes p
+          voters = poll.ballots
+            |> Poll.collectPlayerVotes p
             |> Array.fromList
             |> Array.get (x - 1)
         in
@@ -212,9 +362,9 @@ graphBarTooltip model =
                   (List.map (\a -> E.text a) v)
                 ]
             _ ->
-              E.text "whoops"
+              E.none
       _ ->
-        E.text "whoops"
+        E.none
 
 lineVert : E.Element msg
 lineVert = 
@@ -250,11 +400,11 @@ voteChart : Model -> E.Element Msg
 voteChart model =
   let
     votes =
-      case model.selectedPlayer of
-          Nothing ->
+      case (model.selectedPlayer, model.premierePoll) of
+          (Just player, Just poll) ->
+            Poll.collectPlayerVotes player poll.ballots |> List.map List.length
+          _ ->
             List.repeat 25 0
-          Just p ->
-            PremierePoll.collectPlayerVotes p model.ballots |> List.map List.length
   in
   E.column
     []

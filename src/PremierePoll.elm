@@ -1,6 +1,17 @@
-module PremierePoll exposing (PremirePoll, Discipline, Ballot, collectPlayerVotes, parseBallotData, getPlayerNames)
+module PremierePoll exposing
+  ( PremirePoll
+  , Discipline (..)
+  , Ballot
+  , disciplineString
+  , collectPlayerVotes
+  , parseBallotData
+  , getPlayerNames
+  , longYearMonthString
+  )
 
 import Set
+import Array
+import Maybe exposing (andThen)
 
 
 type alias PremirePoll =
@@ -11,13 +22,23 @@ type alias PremirePoll =
 
 type Discipline = 
   Open 
-  | DAS 
+  | Das 
   | Tap
 
 type alias Ballot =
   {  voter : String
   ,  votes : List String
   }
+
+disciplineString : Discipline -> String
+disciplineString discipline =
+  case discipline of
+    Open -> 
+      "Open"
+    Das ->
+      "DAS"
+    Tap ->
+      "Tap"
 
 getPlayerNames : List Ballot -> List String
 getPlayerNames = List.map (\l -> l.votes) >> List.concat >> Set.fromList >> Set.toList
@@ -54,3 +75,38 @@ convertListToBallot list =
       Just { voter = x
            , votes = xs
            }
+
+longMonthNames : Array.Array String
+longMonthNames =
+  Array.fromList
+    [ "January"
+    , "February"
+    , "March"
+    , "April"
+    , "May"
+    , "June"
+    , "July"
+    , "August"
+    , "September"
+    , "October"
+    , "November"
+    , "December"
+    ]
+
+getLongMonthName : Int -> Maybe String
+getLongMonthName monthNumber =
+  if 
+    monthNumber > 0 && monthNumber <= 12
+  then
+    Array.get (monthNumber - 1) longMonthNames
+  else
+    Nothing
+    
+
+    
+
+longYearMonthString : (Int, Int) -> Maybe String
+longYearMonthString (year, month) =
+  getLongMonthName month
+    |> andThen (\m -> Just (m ++ " " ++ (String.fromInt year)))
+      
