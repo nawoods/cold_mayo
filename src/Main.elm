@@ -1,29 +1,29 @@
 module Main exposing (main)
 
 import Browser
-import Css as C
-import Html.Styled as H
-import Html.Styled.Attributes as HA
-import Html.Styled.Events as HE
-import Svg.Styled as S
-import Svg.Styled.Attributes as SA
+import Svg as S
+import Svg.Attributes as SA
 import Set
 
+import Element as E
+-- import Element.Background as Background
+-- import Element.Border as Border
+-- import Element.Font as Font
+import Dropdown exposing (Dropdown, OutMsg(..), Placement(..))
+import Html exposing (Html)
+
+-- MAIN
+
 main = 
-  Browser.sandbox { init = init, update = update, view = view >> H.toUnstyled }
-
-type Msg = SelectPlayer String
-
-update : Msg -> Model -> Model
-update msg model = 
-  case msg of
-    SelectPlayer player ->
-      { model | selectedPlayer = Just player }
+  Browser.document { init = init, update = update, view = view, subscriptions = subscriptions }
 
 
+
+-- MODEL
 
 type alias Model =
   { selectedPlayer : Maybe String
+  , playerDropdown: Dropdown String
   , ballots : List Ballot
   }
 
@@ -32,17 +32,95 @@ type alias Ballot =
   ,  votes : List String
   }
 
-init : Model
-init = 
-  { selectedPlayer = Nothing
-  , ballots = rawBallotData |> parseBallotData
+init : () -> ( Model, Cmd Msg )
+init _ = 
+  (
+    { selectedPlayer = Nothing
+    , ballots = rawBallotData |> parseBallotData
+    , playerDropdown = Dropdown.init
+        |> Dropdown.id "player-dropdown"
+        |> Dropdown.inputType Dropdown.TextField
+        |> Dropdown.stringOptions (rawBallotData |> parseBallotData |> getPlayerNames)
+        -- |> Dropdown.filterType Dropdown.StartsWithThenContains
+    }
+    , Cmd.none
+  )
+
+
+
+
+-- UPDATE 
+
+type Msg = 
+  PlayerDropdownMsg (Dropdown.Msg String)
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model = 
+  case msg of
+    PlayerDropdownMsg subMsg ->
+      let
+        ( dropdown, cmd, outMsg ) =
+          Dropdown.update subMsg model.playerDropdown
+      in
+      ( { model
+           | playerDropdown = dropdown
+           , selectedPlayer =
+               case outMsg of
+                   Selected (_, _, option) ->
+                      Just option
+                   TextChanged _ ->
+                      Nothing
+                   _ ->
+                      model.selectedPlayer
+        }
+        , Cmd.map PlayerDropdownMsg cmd
+      )
+                    
+          
+    
+
+
+
+
+
+
+-- SUBSCRIPTIONS
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.none
+
+
+
+
+
+
+
+-- VIEW
+
+view : Model -> Browser.Document Msg
+view model = 
+  { title = "Cold Mayo"
+  , body = [ body model ]
   }
 
+body : Model -> Html Msg
+body model =
+  E.layout
+    []
+    (E.column 
+      [ E.centerX, E.spacing 40, E.padding 40 ]
+      [ playerDropdown model
+      , voteChart model
+      ]
+    )
 
+elsvg : List (S.Attribute msg) -> List (S.Svg msg) -> E.Element msg
+elsvg xs ys = S.svg xs ys |> E.html
 
-svgRect : Int -> S.Svg msg
+svgRect : Int -> E.Element msg
 svgRect ht =
-  S.svg
+  elsvg
     [ SA.width "20"
     , SA.height <| String.fromInt <| 10 * ht
     ]
@@ -54,9 +132,12 @@ svgRect ht =
         []
     ]
 
-lineVert : S.Svg msg
+graphBar : Int -> E.Element msg
+graphBar ht = E.el [ E.alignBottom ] (svgRect ht)
+
+lineVert : E.Element msg
 lineVert = 
-  S.svg
+  elsvg
     [ SA.width "5" 
     , SA.height "250"
     ]
@@ -68,9 +149,9 @@ lineVert =
       []
     ]
 
-lineHoriz : S.Svg msg
+lineHoriz : E.Element msg
 lineHoriz =
-  S.svg
+  elsvg
     [ SA.width "505" 
     , SA.height "5"
     ]
@@ -83,24 +164,8 @@ lineHoriz =
     ]
 
 
--- votes : List Int
--- votes =
---   [ 0, 0, 0, 0, 0
---   , 1, 4, 5, 4, 0
---   , 3, 0, 1, 1, 1
---   , 0, 1, 0, 0, 0
---   , 0, 0, 0, 0, 0
---   ]
 
-view: Model -> H.Html Msg
-view model =
-  H.div 
-    []
-    [ voteChart model
-    , playerDropdown model.ballots
-    ]
-
-voteChart : Model -> H.Html Msg
+voteChart : Model -> E.Element Msg
 voteChart model =
   let
     votes =
@@ -110,31 +175,21 @@ voteChart model =
           Just p ->
             collectPlayerVotes p model.ballots |> List.map List.length
   in
-  H.div 
-    [ HA.css 
-      [ C.displayFlex 
-      , C.flexDirection C.column
-      , C.alignItems C.center
-      ] 
-    ]
-    [ H.div 
-      [ HA.css
-        [ C.displayFlex
-        , C.alignItems C.flexEnd
-        ]
-      ]
-      <| lineVert :: List.map svgRect votes
+  E.column
+    []
+    [ E.row
+      []
+      (lineVert :: List.map graphBar votes)
     , lineHoriz
     ]
+      
 
-playerDropdown : List Ballot -> H.Html Msg
-playerDropdown ballots =
-  let 
-    players = getPlayerNames ballots
-  in
-  H.select
-    [ HE.onInput SelectPlayer ]
-    <| List.map (\p -> H.option [] [ H.text p ]) players
+playerDropdown : Model -> E.Element Msg
+playerDropdown model = 
+  Dropdown.label (E.text "Player") model.playerDropdown
+    |> Dropdown.inputType Dropdown.TextField
+    |> Dropdown.labelPlacement Left
+    |> Dropdown.view PlayerDropdownMsg
 
 getPlayerNames : List Ballot -> List String
 getPlayerNames = List.map (\l -> l.votes) >> List.concat >> Set.fromList >> Set.toList
