@@ -9,12 +9,14 @@ import Element as E
 import Element.Events as EE
 -- import Element.Background as Background
 -- import Element.Border as Border
--- import Element.Font as Font
+import Element.Font as Font
 import Dropdown exposing (Dropdown, OutMsg(..), Placement(..))
 import Html exposing (Html)
+import Array
 
 -- MAIN
 
+main : Program () Model Msg
 main = 
   Browser.document { init = init, update = update, view = view, subscriptions = subscriptions }
 
@@ -83,7 +85,7 @@ update msg model =
     GraphBarMouseEnterMsg bar ->
       ( { model | mouseoverBar = Just bar }, Cmd.none )
     GraphBarMouseLeaveMsg ->
-      ( { model | mouseoverBar = Nothing}, Cmd.none )
+      ( { model | mouseoverBar = Nothing }, Cmd.none )
                     
           
     
@@ -96,7 +98,7 @@ update msg model =
 -- SUBSCRIPTIONS
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Sub.none
 
 
@@ -117,12 +119,40 @@ body : Model -> Html Msg
 body model =
   E.layout
     []
-    (E.column 
-      [ E.centerX, E.spacing 40, E.padding 40 ]
-      [ playerDropdown model
-      , voteChart model
+    (E.column
+      [ E.width E.fill, E.height E.fill ]
+      [ E.column 
+          [ E.centerX
+          , E.spacing 40
+          , E.padding 40 
+          , Font.size 18
+          ]
+          [ E.column
+            []
+            [ E.el [Font.size 24] <| E.text "Cold Mayo"
+            , E.el [Font.size 16] <| E.text "A delicious plant-based spread for Nestris enthusiasts"
+
+            ]
+          , playerDropdown model
+          , voteChart model
+          ]
+       , E.el 
+         [ E.alignBottom
+         , E.alignRight 
+         , E.padding 10
+         , Font.size 16
+         ] 
+         <| E.paragraph 
+           [] 
+           [ E.text "Put together by Nick \"arbaro\" Woods of NES Tetris fame. View the source code "
+           , E.link [ cornflower ] { url = "https://github.com/nawoods/cold_mayo", label = E.text "here" }
+           , E.text "."
+           ]
       ]
     )
+
+cornflower : E.Attr decorative msg
+cornflower = Font.color (E.rgb255 100 149 237)
 
 elsvg : List (S.Attribute msg) -> List (S.Svg msg) -> E.Element msg
 elsvg xs ys = S.svg xs ys |> E.html
@@ -136,7 +166,7 @@ svgRect sel ht =
     [ S.rect
         [ SA.width "100%" 
         , SA.height "100%"
-        , SA.fill ( if sel then "darkorange" else "orange" )
+        , SA.fill ( if sel then "orange" else "cornflowerblue" )
         ]
         []
     ]
@@ -145,12 +175,46 @@ graphBar : Model -> Int -> Int -> E.Element Msg
 graphBar model col ht = 
   let
     sel = Just col == model.mouseoverBar
+    addInfoBox = (\xs -> if sel then (E.below (graphBarTooltip model)) :: xs else xs)
   in
-  E.el [ E.alignBottom 
-       , EE.onMouseEnter (GraphBarMouseEnterMsg col)
-       , EE.onMouseLeave GraphBarMouseLeaveMsg
-       ] 
-       (svgRect sel ht)
+  E.el 
+    (addInfoBox
+      [ E.alignBottom 
+      , EE.onMouseEnter (GraphBarMouseEnterMsg col)
+      , EE.onMouseLeave GraphBarMouseLeaveMsg
+      ] 
+    )
+    (svgRect sel ht)
+
+graphBarTooltip : Model -> E.Element msg
+graphBarTooltip model =
+  case (model.mouseoverBar, model.selectedPlayer) of
+      (Just x, Just p) ->
+        let
+          voters = model.ballots
+            |> collectPlayerVotes p
+            |> Array.fromList
+            |> Array.get (x - 1)
+        in
+        case voters of
+            Just v ->
+              E.column
+                [ E.paddingXY 0 10 ]
+                [ E.text ("Ranked " 
+                    ++ ordinal x 
+                    ++ " by " 
+                    ++ (v |> List.length |> String.fromInt)
+                    ++ " pollster"
+                    ++ if List.length v == 1 then "" else "s"
+                  ),
+                  E.column
+                  [ Font.size 14 ]
+                  (List.map (\a -> E.text a) v)
+                ]
+            _ ->
+              E.text "whoops"
+      _ ->
+        E.text "whoops"
 
 lineVert : E.Element msg
 lineVert = 
@@ -198,8 +262,36 @@ voteChart model =
       []
       (lineVert :: List.map2 (graphBar model) (List.range 1 25) votes)
     , lineHoriz
+    , case model.mouseoverBar of
+        Nothing ->
+          E.row
+           [ E.paddingXY 5 5, E.width E.fill ]
+           [ E.el [ E.alignLeft ] <| E.text "1"
+           , E.el [ E.centerX ] <| E.text "Rank"
+           , E.el [ E.alignRight ] <| E.text "25"
+           ]
+        _ ->
+          E.none
     ]
       
+ordinal : Int -> String
+ordinal x =
+  let 
+    suffix =
+      case x // 10 of
+          1 ->
+            "th"
+          _ ->
+            case modBy 10 x of
+                1 ->
+                  "st"
+                2 ->
+                  "nd"
+                3 ->
+                  "rd"
+                _ ->
+                  "th"
+  in String.fromInt x ++ suffix
 
 playerDropdown : Model -> E.Element Msg
 playerDropdown model = 
