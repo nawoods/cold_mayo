@@ -6,6 +6,7 @@ import Svg.Attributes as SA
 import Set
 
 import Element as E
+import Element.Events as EE
 -- import Element.Background as Background
 -- import Element.Border as Border
 -- import Element.Font as Font
@@ -23,8 +24,9 @@ main =
 
 type alias Model =
   { selectedPlayer : Maybe String
-  , playerDropdown: Dropdown String
+  , playerDropdown : Dropdown String
   , ballots : List Ballot
+  , mouseoverBar : Maybe Int
   }
 
 type alias Ballot =
@@ -36,12 +38,13 @@ init : () -> ( Model, Cmd Msg )
 init _ = 
   (
     { selectedPlayer = Nothing
+    , mouseoverBar = Nothing
     , ballots = rawBallotData |> parseBallotData
     , playerDropdown = Dropdown.init
         |> Dropdown.id "player-dropdown"
         |> Dropdown.inputType Dropdown.TextField
         |> Dropdown.stringOptions (rawBallotData |> parseBallotData |> getPlayerNames)
-        -- |> Dropdown.filterType Dropdown.StartsWithThenContains
+        |> Dropdown.filterType Dropdown.StartsWithThenContains
     }
     , Cmd.none
   )
@@ -53,6 +56,8 @@ init _ =
 
 type Msg = 
   PlayerDropdownMsg (Dropdown.Msg String)
+  | GraphBarMouseEnterMsg Int
+  | GraphBarMouseLeaveMsg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model = 
@@ -75,6 +80,10 @@ update msg model =
         }
         , Cmd.map PlayerDropdownMsg cmd
       )
+    GraphBarMouseEnterMsg bar ->
+      ( { model | mouseoverBar = Just bar }, Cmd.none )
+    GraphBarMouseLeaveMsg ->
+      ( { model | mouseoverBar = Nothing}, Cmd.none )
                     
           
     
@@ -118,8 +127,8 @@ body model =
 elsvg : List (S.Attribute msg) -> List (S.Svg msg) -> E.Element msg
 elsvg xs ys = S.svg xs ys |> E.html
 
-svgRect : Int -> E.Element msg
-svgRect ht =
+svgRect : Bool -> Int -> E.Element msg
+svgRect sel ht =
   elsvg
     [ SA.width "20"
     , SA.height <| String.fromInt <| 10 * ht
@@ -127,13 +136,21 @@ svgRect ht =
     [ S.rect
         [ SA.width "100%" 
         , SA.height "100%"
-        , SA.fill "orange"
+        , SA.fill ( if sel then "darkorange" else "orange" )
         ]
         []
     ]
 
-graphBar : Int -> E.Element msg
-graphBar ht = E.el [ E.alignBottom ] (svgRect ht)
+graphBar : Model -> Int -> Int -> E.Element Msg
+graphBar model col ht = 
+  let
+    sel = Just col == model.mouseoverBar
+  in
+  E.el [ E.alignBottom 
+       , EE.onMouseEnter (GraphBarMouseEnterMsg col)
+       , EE.onMouseLeave GraphBarMouseLeaveMsg
+       ] 
+       (svgRect sel ht)
 
 lineVert : E.Element msg
 lineVert = 
@@ -179,7 +196,7 @@ voteChart model =
     []
     [ E.row
       []
-      (lineVert :: List.map graphBar votes)
+      (lineVert :: List.map2 (graphBar model) (List.range 1 25) votes)
     , lineHoriz
     ]
       
