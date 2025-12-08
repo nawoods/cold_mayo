@@ -1,7 +1,11 @@
 module Main exposing (main)
 
 import Browser
+import Browser.Navigation exposing (Key)
 import Html exposing (Html)
+import Url
+import Url.Builder
+import Url.Parser as P exposing ((</>))
 
 import Array
 
@@ -21,7 +25,14 @@ import PremierePoll.Data as PollData
 
 main : Program () Model Msg
 main = 
-  Browser.document { init = init, update = update, view = view, subscriptions = subscriptions }
+  Browser.application 
+    { init = init
+    , update = update
+    , view = view
+    , subscriptions = subscriptions 
+    , onUrlChange = UrlChanged
+    , onUrlRequest = LinkClicked
+    }
 
 
 
@@ -29,6 +40,8 @@ main =
 
 type alias Model =
   { appStatus: AppStatus
+  , key: Key
+  , url: Url.Url
   }
 
 type AppStatus =
@@ -52,13 +65,28 @@ type alias ViewGraphModel =
       , mouseoverBar : Maybe Int
       }
 
-init : () -> ( Model, Cmd Msg )
-init _ = 
+init : () -> Url.Url -> Key -> ( Model, Cmd Msg )
+init _ url key = 
   (
-    { appStatus = SelectPoll SelectDiscipline
+    { appStatus = appStatusFromUrl url
+    , url = url
+    , key = key
     }
     , Cmd.none
   )
+
+newViewGraphInit : Poll.PremierePoll -> ViewGraphModel
+newViewGraphInit p = 
+  { premierePoll = p
+  , mouseoverBar = Nothing
+  , selectedPlayer = Nothing
+  , playerDropdown = Dropdown.init
+     |> Dropdown.id "player-dropdown"
+     |> Dropdown.inputType Dropdown.TextField
+     |> Dropdown.filterType Dropdown.StartsWithThenContains
+     |> Dropdown.stringOptions
+         (p.ballots |> Poll.getPlayerNames)
+  }
 
 
 
@@ -73,7 +101,9 @@ type Msg =
      , year : Int
      , month : Int
      }
-  | ClearSelectionsMsg
+  -- | ClearSelectionsMsg
+  | LinkClicked Browser.UrlRequest
+  | UrlChanged Url.Url
 
 type SelectPollSubmsg =
   DisciplineSelectMsg Poll.Discipline
@@ -112,12 +142,12 @@ update msg model =
           , Cmd.map ViewGraphMsg cmd )
         _ ->
           ( model, Cmd.none )
-    ClearSelectionsMsg ->
-      ( { model 
-           | appStatus = SelectPoll SelectDiscipline
-        }
-      , Cmd.none
-      )
+    -- ClearSelectionsMsg ->
+    --   ( { model 
+    --        | appStatus = SelectPoll SelectDiscipline
+    --     }
+    --   , Cmd.none
+    --   )
     MakePollSelectionMsg pollInfo ->
       let
         poll =
@@ -129,21 +159,8 @@ update msg model =
       in
       case poll of
         Just p ->
-          let
-            newViewGraphStatus = 
-              { premierePoll = p
-              , mouseoverBar = Nothing
-              , selectedPlayer = Nothing
-              , playerDropdown = Dropdown.init
-                 |> Dropdown.id "player-dropdown"
-                 |> Dropdown.inputType Dropdown.TextField
-                 |> Dropdown.filterType Dropdown.StartsWithThenContains
-                 |> Dropdown.stringOptions
-                     (p.ballots |> Poll.getPlayerNames)
-              }
-          in
             ( { model
-                 | appStatus = ViewGraph newViewGraphStatus
+                 | appStatus = ViewGraph (newViewGraphInit p)
               }
             , Cmd.none 
             )
@@ -153,6 +170,58 @@ update msg model =
             }
           , Cmd.none
           )
+    LinkClicked urlRequest ->
+      case urlRequest of
+        Browser.Internal url ->
+          ( model, Browser.Navigation.pushUrl model.key (Url.toString url) )
+        Browser.External href ->
+          ( model, Browser.Navigation.load href )
+    UrlChanged url ->
+      ( { model
+           | appStatus = appStatusFromUrl url
+           , url = url
+        }
+      , Cmd.none -- Browser.Navigation.replaceUrl model.key (Poll.toUrlString poll)
+      )
+      -- let
+      --   route = P.parse parser url
+      -- in
+      -- case route of
+      --   Just Home ->
+      --     ( { model
+      --          | url = url
+      --          , appStatus = SelectPoll SelectDiscipline
+      --       }
+      --     , Browser.Navigation.replaceUrl model.key "/"
+      --     )
+      --   Just (Poll discString year month) ->
+      --     let 
+      --       maybePoll 
+      --         = discString
+      --         |> Poll.disciplineFromString
+      --         |> Maybe.andThen (\d -> Poll.findPoll d year month PollData.polls)
+      --     in
+      --     case maybePoll of
+      --       Just poll ->
+      --         ( { model
+      --              | url = url
+      --              , appStatus = ViewGraph (newViewGraphInit poll)
+      --           }
+      --         , Browser.Navigation.replaceUrl model.key (Poll.toUrlString poll)
+      --         )
+      --       Nothing ->
+      --         ( { model
+      --              | url = url
+      --              , appStatus = SelectPoll SelectDiscipline
+      --           }
+      --         , Browser.Navigation.replaceUrl model.key "/"
+      --         )
+      --   Nothing ->
+      --     ( { model
+      --          | url = url
+      --       }
+      --     , Cmd.none
+      --     )
           
     
 updateSelectPoll : SelectPollSubmsg -> SelectPollModel -> SelectPollModel
@@ -196,6 +265,53 @@ updateViewGraph subMsg viewGraphModel =
        ( { viewGraphModel | mouseoverBar = Just bar }, Cmd.none )
     GraphBarMouseLeaveMsg ->
        ( { viewGraphModel | mouseoverBar = Nothing }, Cmd.none )
+
+type Route
+  = Home
+  | Poll String Int Int
+
+parser: P.Parser (Route -> a) a
+parser =
+  P.oneOf
+    [ P.map Home P.top
+    , P.map Poll (P.s "poll" </> P.string </> P.int </> P.int)
+    ]
+
+-- defaultUrlFromRoute : Route -> String
+-- defaultUrlFromRoute route =
+--   case route of
+--     Home ->
+--       "/"
+--     Poll disc year month ->
+--       "/" ++ disc ++ "/" ++ String.fromInt year ++ "/" ++ String.fromInt month ++ "/"
+      
+      
+      
+
+appStatusFromUrl : Url.Url -> AppStatus
+appStatusFromUrl url =
+  let
+    route = P.parse parser url
+  in
+  case route of
+    Just Home ->
+      SelectPoll SelectDiscipline
+    Just (Poll discString year month) ->
+      let 
+        maybePoll 
+          = discString
+          |> Poll.disciplineFromString
+          |> Maybe.andThen (\d -> Poll.findPoll d year month PollData.polls)
+      in
+      case maybePoll of
+        Just poll ->
+          ViewGraph (newViewGraphInit poll)
+        Nothing ->
+          SelectPoll SelectDiscipline
+    Nothing ->
+      SelectPoll SelectDiscipline
+
+
     
           
 
@@ -301,11 +417,16 @@ viewGraphContent model =
     , voteChart model
     , case model.mouseoverBar of
         Nothing ->
-          EI.button
-          [ E.alignRight ]
-          { onPress = Just ClearSelectionsMsg
-          , label = E.text "Go again ->"
-          }
+          -- EI.button
+          -- [ E.alignRight ]
+          -- { onPress = Just ClearSelectionsMsg
+          -- , label = E.text "Go again ->"
+          -- }
+          E.link
+            [ E.alignRight ]
+            { url = "/"
+            , label = E.text "Go again ->"
+            }
         _ ->
           E.none
     ]
@@ -322,7 +443,7 @@ pollHeading poll =
     ++ " "
     ++ String.fromInt poll.year
     ++ " "
-    ++ Poll.disciplineString poll.discipline
+    ++ Poll.disciplineToString poll.discipline
     ++ " Poll"
     )
 
@@ -333,7 +454,7 @@ disciplineButtonRow =
   E.row
   [ E.spacing 20 ]
   ( [Poll.Open, Poll.Das, Poll.Tap]
-      |> List.map (\d -> disciplineButton d (Poll.disciplineString d))
+      |> List.map (\d -> disciplineButton d (Poll.disciplineToString d))
       |> List.intersperse (E.text "|")
   )
 
@@ -385,16 +506,11 @@ monthButton discipline year month =
           a
         Nothing ->
          "?"
+    disciplineText = discipline |> Poll.disciplineToString |> String.toLower
   in
-  EI.button
+  E.link
   []
-  { onPress = 
-      Just (MakePollSelectionMsg 
-        { discipline = discipline
-        , year = year
-        , month = month
-        }
-      )
+  { url = "/poll/" ++ disciplineText ++ "/" ++ String.fromInt year ++ "/" ++ String.fromInt month ++ "/"
   , label = E.text label
   }
 

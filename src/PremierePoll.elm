@@ -3,7 +3,8 @@ module PremierePoll exposing
   , Discipline (..)
   , Ballot
   , findPoll
-  , disciplineString
+  , disciplineToString
+  , disciplineFromString
   , collectPlayerVotes
   , parseBallotData
   , getPlayerNames
@@ -11,12 +12,11 @@ module PremierePoll exposing
   , playersInPoll
   , getYearsWithDiscipline
   , getMonthsWithDisciplineAndYear
+  , toUrlString
   )
 
 import Set
 import Array
-import Maybe exposing (andThen)
-import Html.Attributes exposing (disabled)
 
 
 type alias PremierePoll =
@@ -52,8 +52,8 @@ playersInPoll : PremierePoll -> Int
 playersInPoll poll =
   List.length poll.ballots
 
-disciplineString : Discipline -> String
-disciplineString discipline =
+disciplineToString : Discipline -> String
+disciplineToString discipline =
   case discipline of
     Open -> 
       "Open"
@@ -61,6 +61,13 @@ disciplineString discipline =
       "DAS"
     Tap ->
       "Tap"
+
+disciplineFromString : String -> Maybe Discipline
+disciplineFromString str =
+  [Open, Das, Tap]
+    |> List.filter 
+        (\d -> String.toLower (disciplineToString d) == String.toLower str)
+    |> List.head
 
 getPlayerNames : List Ballot -> List String
 getPlayerNames = List.map (\l -> l.votes) >> List.concat >> Set.fromList >> Set.toList
@@ -141,3 +148,11 @@ getLongMonthName monthNumber =
   else
     Nothing
       
+toUrlString : PremierePoll -> String
+toUrlString poll =
+  "/" ++ (disciplineToString poll.discipline) 
+      ++ "/" 
+      ++ (String.fromInt poll.year)
+      ++ "/"
+      ++ (String.fromInt poll.month)
+      ++ "/"
