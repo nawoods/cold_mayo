@@ -28,27 +28,34 @@ main =
 -- MODEL
 
 type alias Model =
-  { selectedPlayer : Maybe String
-  , selectedDiscipline : Maybe Poll.Discipline
-  , selectedYearMonth : Maybe (Int, Int)
-  , playerDropdown : Dropdown String
-  , premierePoll : Maybe Poll.PremirePoll
-  , mouseoverBar : Maybe Int
+  { appStatus: AppStatus
   }
 
+type AppStatus =
+  SelectPoll SelectPollModel
+  | ViewGraph ViewGraphModel
+
+type SelectPollModel =
+  SelectDiscipline
+  | SelectYear
+      { selectedDiscipline : Poll.Discipline
+      }
+  | SelectMonth
+      { selectedDiscipline : Poll.Discipline  
+      , selectedYear : Int
+      }
+
+type alias ViewGraphModel =
+      { premierePoll: Poll.PremierePoll
+      , playerDropdown : Dropdown String
+      , selectedPlayer : Maybe String
+      , mouseoverBar : Maybe Int
+      }
 
 init : () -> ( Model, Cmd Msg )
 init _ = 
   (
-    { selectedPlayer = Nothing
-    , mouseoverBar = Nothing
-    , selectedDiscipline = Nothing
-    , selectedYearMonth = Nothing
-    , premierePoll = Nothing
-    , playerDropdown = Dropdown.init
-        |> Dropdown.id "player-dropdown"
-        |> Dropdown.inputType Dropdown.TextField
-        |> Dropdown.filterType Dropdown.StartsWithThenContains
+    { appStatus = SelectPoll SelectDiscipline
     }
     , Cmd.none
   )
@@ -59,22 +66,119 @@ init _ =
 -- UPDATE 
 
 type Msg = 
+  SelectPollMsg SelectPollSubmsg
+  | ViewGraphMsg ViewGraphSubmsg
+  | MakePollSelectionMsg
+     { discipline : Poll.Discipline
+     , year : Int
+     , month : Int
+     }
+  | ClearSelectionsMsg
+
+type SelectPollSubmsg =
+  DisciplineSelectMsg Poll.Discipline
+  | YearSelectMsg Int
+
+type ViewGraphSubmsg =
   PlayerDropdownMsg (Dropdown.Msg String)
   | GraphBarMouseEnterMsg Int
   | GraphBarMouseLeaveMsg
-  | DisciplineSelectMsg Poll.Discipline
-  | YearMonthSelectMsg (Int, Int)
-  | ClearSelections
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model = 
   case msg of
-    PlayerDropdownMsg subMsg ->
+    SelectPollMsg subMsg ->
+      case model.appStatus of
+        SelectPoll selectPollStatus ->
+          let
+            newSelectPollStatus = updateSelectPoll subMsg selectPollStatus
+          in
+          ( { model
+               | appStatus = SelectPoll newSelectPollStatus
+            }
+          , Cmd.none
+          )
+        _ ->
+          ( model, Cmd.none )
+    ViewGraphMsg subMsg ->
+      case model.appStatus of
+        ViewGraph viewGraphStatus ->
+          let
+            ( newViewGraphStatus, cmd ) = updateViewGraph subMsg viewGraphStatus
+          in
+          ( { model
+               | appStatus = ViewGraph newViewGraphStatus 
+            }
+          , Cmd.map ViewGraphMsg cmd )
+        _ ->
+          ( model, Cmd.none )
+    ClearSelectionsMsg ->
+      ( { model 
+           | appStatus = SelectPoll SelectDiscipline
+        }
+      , Cmd.none
+      )
+    MakePollSelectionMsg pollInfo ->
+      let
+        poll =
+          Poll.findPoll 
+            pollInfo.discipline 
+            pollInfo.year 
+            pollInfo.month
+            PollData.polls
+      in
+      case poll of
+        Just p ->
+          let
+            newViewGraphStatus = 
+              { premierePoll = p
+              , mouseoverBar = Nothing
+              , selectedPlayer = Nothing
+              , playerDropdown = Dropdown.init
+                 |> Dropdown.id "player-dropdown"
+                 |> Dropdown.inputType Dropdown.TextField
+                 |> Dropdown.filterType Dropdown.StartsWithThenContains
+                 |> Dropdown.stringOptions
+                     (p.ballots |> Poll.getPlayerNames)
+              }
+          in
+            ( { model
+                 | appStatus = ViewGraph newViewGraphStatus
+              }
+            , Cmd.none 
+            )
+        Nothing ->
+          ( { model 
+               | appStatus = SelectPoll SelectDiscipline
+            }
+          , Cmd.none
+          )
+          
+    
+updateSelectPoll : SelectPollSubmsg -> SelectPollModel -> SelectPollModel
+updateSelectPoll subMsg selectPollStatus =
+  case subMsg of
+    DisciplineSelectMsg discipline ->
+      SelectYear { selectedDiscipline = discipline }
+    YearSelectMsg year ->
+      case selectPollStatus of
+        SelectYear status ->
+          SelectMonth 
+            { selectedDiscipline = status.selectedDiscipline
+            , selectedYear = year
+            }
+        _ ->
+          selectPollStatus
+    
+updateViewGraph : ViewGraphSubmsg -> ViewGraphModel -> ( ViewGraphModel, Cmd ViewGraphSubmsg )
+updateViewGraph subMsg viewGraphModel =
+  case subMsg of
+    PlayerDropdownMsg dropdownSubMsg ->
       let
         ( dropdown, cmd, outMsg ) =
-          Dropdown.update subMsg model.playerDropdown
+          Dropdown.update dropdownSubMsg viewGraphModel.playerDropdown
       in
-      ( { model
+      ( { viewGraphModel
            | playerDropdown = dropdown
            , selectedPlayer =
                case outMsg of
@@ -83,57 +187,17 @@ update msg model =
                    TextChanged _ ->
                       Nothing
                    _ ->
-                      model.selectedPlayer
+                      viewGraphModel.selectedPlayer
         }
         , Cmd.map PlayerDropdownMsg cmd
+
       )
     GraphBarMouseEnterMsg bar ->
-      ( { model | mouseoverBar = Just bar }, Cmd.none )
+       ( { viewGraphModel | mouseoverBar = Just bar }, Cmd.none )
     GraphBarMouseLeaveMsg ->
-      ( { model | mouseoverBar = Nothing }, Cmd.none )
-    DisciplineSelectMsg discipline ->
-      ( { model | selectedDiscipline = Just discipline }, Cmd.none )
-    YearMonthSelectMsg ym ->
-      ( case model.selectedDiscipline of
-          Just discipline ->
-            let
-              premierePoll =
-                PollData.polls
-                |> List.filter 
-                    (\poll -> poll.yearMonth == ym && poll.discipline == discipline)
-                |> List.head
-            in
-            { model
-              | selectedYearMonth = Just ym
-              , premierePoll = premierePoll
-              , playerDropdown =
-                  case premierePoll of 
-                    Just poll ->
-                      model.playerDropdown
-                        |> Dropdown.stringOptions 
-                          (poll.ballots |> Poll.getPlayerNames)
-                    Nothing ->
-                      model.playerDropdown
-            }
-          Nothing ->
-            { model | selectedYearMonth = Just ym }
-      , Cmd.none 
-      )
-    ClearSelections ->
-      ( { model
-            | selectedDiscipline = Nothing
-            , selectedPlayer = Nothing
-            , selectedYearMonth = Nothing
-            , premierePoll = Nothing
-        }
-      , Cmd.none
-      )
-                    
-          
+       ( { viewGraphModel | mouseoverBar = Nothing }, Cmd.none )
     
-
-
-
+          
 
 
 
@@ -165,6 +229,7 @@ body model =
       [ E.width E.fill, E.height E.fill ]
       [ E.column 
           [ E.centerX
+          , E.width (E.px 585)
           , E.spacing 40
           , E.padding 40 
           , Font.size 18
@@ -201,57 +266,66 @@ footer =
 
 content : Model -> E.Element Msg
 content model =
-  case (model.selectedDiscipline, model.selectedYearMonth) of
-    (Nothing, _) ->
+  case model.appStatus of
+    SelectPoll selectPollModel ->
+      selectPollContent selectPollModel
+    ViewGraph viewGraphModel ->
+      viewGraphContent viewGraphModel
+      
+
+selectPollContent : SelectPollModel -> E.Element Msg
+selectPollContent model =
+  case model of
+    SelectDiscipline ->
       disciplineButtonRow
-    (Just _, Nothing) ->
+    SelectYear args ->
       E.column
         [ E.spacing 20 ]
         [ disciplineButtonRow
-        , yearMonthButtonRow model
+        , yearButtonRow args.selectedDiscipline
         ]
-    _ ->
-      case model.premierePoll of
-        Just _ ->
-          E.column
-            [ E.spacing 30 ]
-            [ pollHeading model
-            , playerDropdown model
-            , voteChart model
-            , case model.mouseoverBar of
-                Nothing ->
-                  EI.button
-                  [ E.alignRight ]
-                  { onPress = Just ClearSelections
-                  , label = E.text "Go again ->"
-                  }
-                _ ->
-                  E.none
-          ]
-        _ ->
-          E.column
-            [ E.spacing 20 ]
-            [ disciplineButtonRow
-            , yearMonthButtonRow model
-            , E.text "No poll found"
-            ]
+    SelectMonth args ->
+      E.column
+        [ E.spacing 20 ]
+        [ disciplineButtonRow
+        , yearButtonRow args.selectedDiscipline
+        , monthButtonRow args.selectedDiscipline args.selectedYear
+        ]
 
-pollHeading : Model -> E.Element msg
-pollHeading model =
-  case (model.selectedYearMonth, model.selectedDiscipline) of
-    (Just yearMonth, Just discipline) ->
-      let 
-        yearMonthText = 
-          Maybe.withDefault "?" (Poll.longYearMonthString yearMonth)
-      in
-      E.text
-        (  yearMonthText
-        ++ " "
-        ++ Poll.disciplineString discipline
-        ++ " Poll"
-        )
-    _ ->
-      E.none
+viewGraphContent : ViewGraphModel -> E.Element Msg
+viewGraphContent model =
+  E.column
+    [ E.spacing 30 ]
+    [ pollHeading model.premierePoll
+    , playerDropdown model.playerDropdown
+    , voteChart model
+    , case model.mouseoverBar of
+        Nothing ->
+          EI.button
+          [ E.alignRight ]
+          { onPress = Just ClearSelectionsMsg
+          , label = E.text "Go again ->"
+          }
+        _ ->
+          E.none
+    ]
+
+
+pollHeading : Poll.PremierePoll -> E.Element msg
+pollHeading poll =
+  let
+    monthText =
+      Maybe.withDefault "?" (Poll.getLongMonthName poll.month)
+  in
+  E.text
+    (  monthText
+    ++ " "
+    ++ String.fromInt poll.year
+    ++ " "
+    ++ Poll.disciplineString poll.discipline
+    ++ " Poll"
+    )
+
 
 
 disciplineButtonRow : E.Element Msg
@@ -267,27 +341,44 @@ disciplineButton : Poll.Discipline -> String -> E.Element Msg
 disciplineButton discipline label =
   EI.button
   []
-  { onPress = Just (DisciplineSelectMsg discipline)
+  { onPress = Just (SelectPollMsg (DisciplineSelectMsg discipline))
   , label = E.text label
   }
 
 
-yearMonthButtonRow : Model -> E.Element Msg
-yearMonthButtonRow model =
+yearButtonRow : Poll.Discipline -> E.Element Msg
+yearButtonRow discipline =
   E.wrappedRow
-  [ E.spacing 20 ]
+  [ E.spacingXY 20 0 ]
   ( PollData.polls
-    |> List.filter (\poll -> Just poll.discipline == model.selectedDiscipline)
-    |> List.map .yearMonth
-    |> List.map yearMonthButton
+    |> Poll.getYearsWithDiscipline discipline
+    |> List.map yearButton
     |> List.intersperse (E.text "|")
   )
-  
 
-yearMonthButton : (Int, Int) -> E.Element Msg
-yearMonthButton ym =
+yearButton : Int -> E.Element Msg
+yearButton year =
+  EI.button
+  []
+  { onPress = Just (SelectPollMsg (YearSelectMsg year))
+  , label = E.text (String.fromInt year)
+  }
+
+-- monthButtonRow : SelectPollModel -> E.Element Msg
+monthButtonRow : Poll.Discipline -> Int -> E.Element Msg
+monthButtonRow discipline year =
+  E.wrappedRow
+  [ E.spacingXY 20 0 ]
+  ( PollData.polls
+    |> Poll.getMonthsWithDisciplineAndYear discipline year
+    |> List.map (monthButton discipline year)
+    |> List.intersperse (E.text "|")
+  )
+
+monthButton : Poll.Discipline -> Int -> Int -> E.Element Msg
+monthButton discipline year month =
   let
-    monthText = Poll.longYearMonthString ym
+    monthText = Poll.getLongMonthName month
     label =
       case monthText of
         Just a ->
@@ -297,7 +388,13 @@ yearMonthButton ym =
   in
   EI.button
   []
-  { onPress = Just (YearMonthSelectMsg ym)
+  { onPress = 
+      Just (MakePollSelectionMsg 
+        { discipline = discipline
+        , year = year
+        , month = month
+        }
+      )
   , label = E.text label
   }
 
@@ -307,10 +404,10 @@ cornflower = Font.color (E.rgb255 100 149 237)
 elsvg : List (S.Attribute msg) -> List (S.Svg msg) -> E.Element msg
 elsvg xs ys = S.svg xs ys |> E.html
 
-svgRect : Bool -> Int -> E.Element msg
-svgRect sel ht =
+svgRect : Bool -> Int -> Int -> E.Element msg
+svgRect sel ln ht =
   elsvg
-    [ SA.width "20"
+    [ SA.width <| String.fromInt ln
     , SA.height <| String.fromInt <| 10 * ht
     ]
     [ S.rect
@@ -321,8 +418,8 @@ svgRect sel ht =
         []
     ]
 
-graphBar : Model -> Int -> Int -> E.Element Msg
-graphBar model col ht = 
+graphBar : ViewGraphModel -> Int -> Int -> E.Element Msg
+graphBar model col votes = 
   let
     sel = Just col == model.mouseoverBar
     addInfoBox = (\xs -> if sel then (E.below (graphBarTooltip model)) :: xs else xs)
@@ -330,18 +427,18 @@ graphBar model col ht =
   E.el 
     (addInfoBox
       [ E.alignBottom 
-      , EE.onMouseEnter (GraphBarMouseEnterMsg col)
-      , EE.onMouseLeave GraphBarMouseLeaveMsg
+      , EE.onMouseEnter <| ViewGraphMsg <| GraphBarMouseEnterMsg col
+      , EE.onMouseLeave <| ViewGraphMsg GraphBarMouseLeaveMsg
       ] 
     )
-    (svgRect sel ht)
+    (svgRect sel 20 votes)
 
-graphBarTooltip : Model -> E.Element msg
+graphBarTooltip : ViewGraphModel -> E.Element msg
 graphBarTooltip model =
-  case (model.mouseoverBar, model.selectedPlayer, model.premierePoll) of
-      (Just x, Just p, Just poll) ->
+  case (model.mouseoverBar, model.selectedPlayer) of
+      (Just x, Just p) ->
         let
-          voters = poll.ballots
+          voters = model.premierePoll.ballots
             |> Poll.collectPlayerVotes p
             |> Array.fromList
             |> Array.get (x - 1)
@@ -396,13 +493,14 @@ lineHoriz =
 
 
 
-voteChart : Model -> E.Element Msg
+voteChart : ViewGraphModel -> E.Element Msg
 voteChart model =
   let
     votes =
-      case (model.selectedPlayer, model.premierePoll) of
-          (Just player, Just poll) ->
-            Poll.collectPlayerVotes player poll.ballots |> List.map List.length
+      case model.selectedPlayer of
+          Just player ->
+            Poll.collectPlayerVotes player model.premierePoll.ballots 
+              |> List.map List.length
           _ ->
             List.repeat 25 0
   in
@@ -443,9 +541,10 @@ ordinal x =
                   "th"
   in String.fromInt x ++ suffix
 
-playerDropdown : Model -> E.Element Msg
-playerDropdown model = 
-  Dropdown.label (E.text "Player") model.playerDropdown
+playerDropdown : Dropdown String -> E.Element Msg
+playerDropdown dropdown = 
+  Dropdown.label (E.text "Player") dropdown
     |> Dropdown.inputType Dropdown.TextField
     |> Dropdown.labelPlacement Left
     |> Dropdown.view PlayerDropdownMsg
+    |> (E.map ViewGraphMsg)

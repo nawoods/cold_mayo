@@ -1,21 +1,27 @@
 module PremierePoll exposing
-  ( PremirePoll
+  ( PremierePoll
   , Discipline (..)
   , Ballot
+  , findPoll
   , disciplineString
   , collectPlayerVotes
   , parseBallotData
   , getPlayerNames
-  , longYearMonthString
+  , getLongMonthName
+  , playersInPoll
+  , getYearsWithDiscipline
+  , getMonthsWithDisciplineAndYear
   )
 
 import Set
 import Array
 import Maybe exposing (andThen)
+import Html.Attributes exposing (disabled)
 
 
-type alias PremirePoll =
-    { yearMonth : ( Int, Int )
+type alias PremierePoll =
+    { year : Int
+    , month : Int
     , discipline : Discipline
     , ballots : List Ballot
     }
@@ -29,6 +35,22 @@ type alias Ballot =
   {  voter : String
   ,  votes : List String
   }
+
+findPoll : Discipline -> Int -> Int -> List PremierePoll -> Maybe PremierePoll
+findPoll discipline year month polls =
+  polls
+    |> List.filter 
+      (\p -> p.discipline == discipline
+      && p.year == year
+      && p.month == month
+      )
+    |> List.head
+
+  
+
+playersInPoll : PremierePoll -> Int
+playersInPoll poll =
+  List.length poll.ballots
 
 disciplineString : Discipline -> String
 disciplineString discipline =
@@ -76,6 +98,23 @@ convertListToBallot list =
            , votes = xs
            }
 
+getYearsWithDiscipline : Discipline -> List PremierePoll -> List Int
+getYearsWithDiscipline discipline polls =
+  polls
+    |> List.filter (\p -> p.discipline == discipline)
+    |> List.map .year
+    |> Set.fromList
+    |> Set.toList
+
+getMonthsWithDisciplineAndYear : Discipline -> Int -> List PremierePoll -> List Int
+getMonthsWithDisciplineAndYear discipline year polls =
+  polls
+    |> List.filter (\p -> p.discipline == discipline && p.year == year)
+    |> List.map .month
+    |> Set.fromList
+    |> Set.toList
+
+
 longMonthNames : Array.Array String
 longMonthNames =
   Array.fromList
@@ -101,12 +140,4 @@ getLongMonthName monthNumber =
     Array.get (monthNumber - 1) longMonthNames
   else
     Nothing
-    
-
-    
-
-longYearMonthString : (Int, Int) -> Maybe String
-longYearMonthString (year, month) =
-  getLongMonthName month
-    |> andThen (\m -> Just (m ++ " " ++ (String.fromInt year)))
       
