@@ -4,7 +4,6 @@ import Browser
 import Browser.Navigation exposing (Key)
 import Html exposing (Html)
 import Url
-import Url.Builder
 import Url.Parser as P exposing ((</>))
 
 import Array
@@ -96,12 +95,6 @@ newViewGraphInit p =
 type Msg = 
   SelectPollMsg SelectPollSubmsg
   | ViewGraphMsg ViewGraphSubmsg
-  | MakePollSelectionMsg
-     { discipline : Poll.Discipline
-     , year : Int
-     , month : Int
-     }
-  -- | ClearSelectionsMsg
   | LinkClicked Browser.UrlRequest
   | UrlChanged Url.Url
 
@@ -142,34 +135,6 @@ update msg model =
           , Cmd.map ViewGraphMsg cmd )
         _ ->
           ( model, Cmd.none )
-    -- ClearSelectionsMsg ->
-    --   ( { model 
-    --        | appStatus = SelectPoll SelectDiscipline
-    --     }
-    --   , Cmd.none
-    --   )
-    MakePollSelectionMsg pollInfo ->
-      let
-        poll =
-          Poll.findPoll 
-            pollInfo.discipline 
-            pollInfo.year 
-            pollInfo.month
-            PollData.polls
-      in
-      case poll of
-        Just p ->
-            ( { model
-                 | appStatus = ViewGraph (newViewGraphInit p)
-              }
-            , Cmd.none 
-            )
-        Nothing ->
-          ( { model 
-               | appStatus = SelectPoll SelectDiscipline
-            }
-          , Cmd.none
-          )
     LinkClicked urlRequest ->
       case urlRequest of
         Browser.Internal url ->
@@ -183,45 +148,6 @@ update msg model =
         }
       , Cmd.none -- Browser.Navigation.replaceUrl model.key (Poll.toUrlString poll)
       )
-      -- let
-      --   route = P.parse parser url
-      -- in
-      -- case route of
-      --   Just Home ->
-      --     ( { model
-      --          | url = url
-      --          , appStatus = SelectPoll SelectDiscipline
-      --       }
-      --     , Browser.Navigation.replaceUrl model.key "/"
-      --     )
-      --   Just (Poll discString year month) ->
-      --     let 
-      --       maybePoll 
-      --         = discString
-      --         |> Poll.disciplineFromString
-      --         |> Maybe.andThen (\d -> Poll.findPoll d year month PollData.polls)
-      --     in
-      --     case maybePoll of
-      --       Just poll ->
-      --         ( { model
-      --              | url = url
-      --              , appStatus = ViewGraph (newViewGraphInit poll)
-      --           }
-      --         , Browser.Navigation.replaceUrl model.key (Poll.toUrlString poll)
-      --         )
-      --       Nothing ->
-      --         ( { model
-      --              | url = url
-      --              , appStatus = SelectPoll SelectDiscipline
-      --           }
-      --         , Browser.Navigation.replaceUrl model.key "/"
-      --         )
-      --   Nothing ->
-      --     ( { model
-      --          | url = url
-      --       }
-      --     , Cmd.none
-      --     )
           
     
 updateSelectPoll : SelectPollSubmsg -> SelectPollModel -> SelectPollModel
