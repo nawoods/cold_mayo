@@ -203,17 +203,6 @@ parser =
     , P.map Poll (P.s "poll" </> P.string </> P.int </> P.int)
     ]
 
--- defaultUrlFromRoute : Route -> String
--- defaultUrlFromRoute route =
---   case route of
---     Home ->
---       "/"
---     Poll disc year month ->
---       "/" ++ disc ++ "/" ++ String.fromInt year ++ "/" ++ String.fromInt month ++ "/"
-      
-      
-      
-
 appStatusFromUrl : Url.Url -> AppStatus
 appStatusFromUrl url =
   let
@@ -343,11 +332,6 @@ viewGraphContent model =
     , voteChart model
     , case model.mouseoverBar of
         Nothing ->
-          -- EI.button
-          -- [ E.alignRight ]
-          -- { onPress = Just ClearSelectionsMsg
-          -- , label = E.text "Go again ->"
-          -- }
           E.link
             [ E.alignRight ]
             { url = "/"
@@ -411,7 +395,6 @@ yearButton year =
   , label = E.text (String.fromInt year)
   }
 
--- monthButtonRow : SelectPollModel -> E.Element Msg
 monthButtonRow : Poll.Discipline -> Int -> E.Element Msg
 monthButtonRow discipline year =
   E.wrappedRow
@@ -498,7 +481,9 @@ graphBarTooltip model =
                   ),
                   E.column
                   [ Font.size 14 ]
-                  (List.map (\a -> E.text a) v)
+                  ( v |> List.sort
+                      |> List.map (\a -> E.text a) 
+                  )
                 ]
             _ ->
               E.none
