@@ -46,6 +46,7 @@ type alias Model =
 type AppStatus =
   SelectPoll SelectPollModel
   | ViewGraph ViewGraphModel
+  | Error String
 
 type SelectPollModel =
   SelectDiscipline
@@ -95,6 +96,7 @@ newViewGraphInit p =
 type Msg = 
   SelectPollMsg SelectPollSubmsg
   | ViewGraphMsg ViewGraphSubmsg
+  | ErrorMsg String
   | LinkClicked Browser.UrlRequest
   | UrlChanged Url.Url
 
@@ -148,6 +150,13 @@ update msg model =
         }
       , Cmd.none -- Browser.Navigation.replaceUrl model.key (Poll.toUrlString poll)
       )
+    ErrorMsg errorText ->
+      ( { model
+           | appStatus = Error errorText
+        }
+      , Cmd.none
+      )
+      
           
     
 updateSelectPoll : SelectPollSubmsg -> SelectPollModel -> SelectPollModel
@@ -222,9 +231,9 @@ appStatusFromUrl url =
         Just poll ->
           ViewGraph (newViewGraphInit poll)
         Nothing ->
-          SelectPoll SelectDiscipline
+          Error "Poll not found"
     Nothing ->
-      SelectPoll SelectDiscipline
+      Error "File not found"
 
 
     
@@ -291,7 +300,7 @@ footer =
   <| E.paragraph 
     [] 
     [ E.text "Put together by Nick \"arbaro\" Woods of NES Tetris fame. View the source code "
-    , E.link [ cornflower ] { url = "https://github.com/nawoods/cold_mayo", label = E.text "here" }
+    , E.link [ Font.color elcolor.cornflower ] { url = "https://github.com/nawoods/cold_mayo", label = E.text "here" }
     , E.text "."
     ]
 
@@ -302,6 +311,8 @@ content model =
       selectPollContent selectPollModel
     ViewGraph viewGraphModel ->
       viewGraphContent viewGraphModel
+    Error errorText ->
+      viewErrorContent errorText
       
 
 selectPollContent : SelectPollModel -> E.Element Msg
@@ -339,6 +350,24 @@ viewGraphContent model =
             }
         _ ->
           E.none
+    ]
+
+viewErrorContent : String -> E.Element msg
+viewErrorContent errorText =
+  E.column
+    [ E.spacing 30 
+    , E.width E.fill
+    ]
+    [ E.el
+       [ Font.color elcolor.red ]
+       (E.text errorText)
+    , E.link
+       [ E.alignRight 
+       ]
+       { url = "/"
+       , label = E.text "Go again ->"
+       }
+      
     ]
 
 
@@ -423,8 +452,11 @@ monthButton discipline year month =
   , label = E.text label
   }
 
-cornflower : E.Attr decorative msg
-cornflower = Font.color (E.rgb255 100 149 237)
+elcolor : { cornflower : E.Color, red : E.Color }
+elcolor =
+  { cornflower = E.rgb255 100 149 237
+  , red = E.rgb255 255 0 0
+  }
 
 elsvg : List (S.Attribute msg) -> List (S.Svg msg) -> E.Element msg
 elsvg xs ys = S.svg xs ys |> E.html
