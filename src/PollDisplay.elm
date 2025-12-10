@@ -1,4 +1,10 @@
-module PollDisplay exposing (..)
+module PollDisplay exposing 
+  ( Model
+  , PollDisplaySubmsg
+  , init
+  , update
+  , pollDisplayContent
+  )
 import PremierePoll as Poll
 
 import Array

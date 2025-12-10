@@ -1,4 +1,9 @@
-module SelectionFlow exposing (..)
+module SelectionFlow exposing 
+  ( Model(..)
+  , SelectionFlowSubmsg
+  , update
+  , selectionPollContent
+  )
 
 import PremierePoll as Poll
 import Element as E
