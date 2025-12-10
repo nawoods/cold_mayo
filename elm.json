@@ -13,6 +13,7 @@
             "elm/svg": "1.0.1",
             "elm/url": "1.0.0",
             "mdgriffith/elm-ui": "1.1.8",
+            "phollyer/elm-ui-colors": "3.0.1",
             "phollyer/elm-ui-dropdown": "2.2.2",
             "rtfeldman/elm-css": "18.0.0"
         },
