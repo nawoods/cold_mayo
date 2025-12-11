@@ -42,6 +42,14 @@ init p =
     { poll = p 
     , mouseoverPlayer = Nothing
     }
+
+getPoll : Model -> Poll.PremierePoll
+getPoll model =
+  case model of
+    ViewingPoll viewingPollModel ->
+      viewingPollModel.poll
+    ViewingPlayer viewingPlayerModel ->
+      viewingPlayerModel.poll
           
 
 type Msg
@@ -78,21 +86,12 @@ update subMsg model =
         _ ->
           ( model, Cmd.none )
     ChoosePlayerMsg player ->
-      case model of
-        ViewingPoll viewingPollModel ->
-          ( ViewingPlayer
-              { poll = viewingPollModel.poll
-              , player = player
-              , mouseoverBar = Nothing
-              }
-          , Cmd.none )
-        ViewingPlayer viewingPlayerModel ->
-          ( ViewingPlayer
-              { viewingPlayerModel
-                  | player = player
-              }
-          , Cmd.none
-          )
+      ( ViewingPlayer
+          { poll = getPoll model
+          , player = player
+          , mouseoverBar = Nothing
+          }
+      , Cmd.none )
     ClearPlayerMsg ->
       case model of
         ViewingPlayer viewingPlayerModel ->
@@ -268,13 +267,8 @@ pollDisplayBottomButtons instructions buttons =
 pollHeading : Model -> E.Element msg
 pollHeading model =
   let
-    poll =
-      case model of
-        ViewingPoll viewingPollModel ->
-          viewingPollModel.poll
-        ViewingPlayer viewingPlayerModel ->
-          viewingPlayerModel.poll
-          
+    poll = getPoll model
+    month = poll |> .month |> Poll.getLongMonthName
   in
   E.column
     [ E.width E.fill ]
@@ -286,7 +280,7 @@ pollHeading model =
             _ ->
               E.none
     , E.text
-        (  (Maybe.withDefault "?" (Poll.getLongMonthName poll.month) )
+        (  ( Maybe.withDefault "?" month )
         ++ " "
         ++ String.fromInt poll.year
         ++ " "
