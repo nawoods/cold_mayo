@@ -62,7 +62,7 @@ init _ url key =
 
 type Msg = 
   SelectionFlowMsg SelectionFlow.SelectionFlowSubmsg
-  | PollDisplayMsg PollDisplay.PollDisplaySubmsg
+  | PollDisplayMsg PollDisplay.Msg
   | ErrorMsg String
   | LinkClicked Browser.UrlRequest
   | UrlChanged Url.Url

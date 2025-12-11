@@ -1,6 +1,6 @@
 module PollDisplay exposing 
   ( Model
-  , PollDisplaySubmsg
+  , Msg
   , init
   , update
   , pollDisplayContent
@@ -16,71 +16,95 @@ import Element.Font as Font
 import Svg as S
 import Svg.Attributes as SA
 
-import Dropdown exposing (Dropdown, OutMsg(..), Placement(..))
 import PremierePoll
 import Element.Border as Border
 
-type alias Model =
-      { premierePoll: Poll.PremierePoll
-      , playerDropdown : Dropdown String
-      , selectedPlayer : Maybe String
-      , mouseoverBar : Maybe Int
-      }
+type Model
+  = ViewingPoll Poll.PremierePoll
+  | ViewingPlayer ViewingPlayerModel
 
-init : Poll.PremierePoll -> Model
-init p = 
-  { premierePoll = p
-  , mouseoverBar = Nothing
-  , selectedPlayer = Nothing
-  , playerDropdown = Dropdown.init
-     |> Dropdown.id "player-dropdown"
-     |> Dropdown.inputType Dropdown.TextField
-     |> Dropdown.filterType Dropdown.StartsWithThenContains
-     |> Dropdown.stringOptions
-         (p.ballots |> Poll.getPlayerNames)
+type alias ViewingPlayerModel =
+  { poll : Poll.PremierePoll
+  , player : String
+  , mouseoverBar : Maybe Int
   }
 
-type PollDisplaySubmsg
+init : Poll.PremierePoll -> Model
+init p = ViewingPoll p
+
+type Msg
   = ChoosePlayerMsg String
   | ClearPlayerMsg
   | GraphBarMouseEnterMsg Bool Int
   | GraphBarMouseLeaveMsg
 
-update : PollDisplaySubmsg -> Model -> ( Model, Cmd PollDisplaySubmsg )
-update subMsg viewGraphModel =
+update : Msg -> Model -> ( Model, Cmd Msg )
+update subMsg model =
   case subMsg of
     GraphBarMouseEnterMsg bool bar ->
-      ( { viewGraphModel 
-            | mouseoverBar = if bool then Just bar else Nothing 
-        }
-      , Cmd.none 
-      )
+      case model of
+        ViewingPlayer viewingPlayerModel ->
+          ( ViewingPlayer
+            { viewingPlayerModel 
+                | mouseoverBar = if bool then Just bar else Nothing 
+            }
+          , Cmd.none 
+          )
+        _ ->
+          ( model, Cmd.none )
     GraphBarMouseLeaveMsg ->
-      ( { viewGraphModel | mouseoverBar = Nothing }, Cmd.none )
+      case model of
+        ViewingPlayer viewingPlayerModel ->
+          ( ViewingPlayer
+            { viewingPlayerModel 
+                | mouseoverBar = Nothing
+            }
+          , Cmd.none 
+          )
+        _ ->
+          ( model, Cmd.none )
     ChoosePlayerMsg player ->
-      ( { viewGraphModel | selectedPlayer = Just player }, Cmd.none )
+      case model of
+        ViewingPoll poll ->
+          ( ViewingPlayer
+              { poll = poll
+              , player = player
+              , mouseoverBar = Nothing
+              }
+          , Cmd.none )
+        ViewingPlayer viewingPlayerModel ->
+          ( ViewingPlayer
+              { viewingPlayerModel
+                  | player = player
+              }
+          , Cmd.none
+          )
     ClearPlayerMsg ->
-      ( { viewGraphModel | selectedPlayer = Nothing }, Cmd.none )
+      case model of
+      ViewingPlayer viewingPlayerModel ->
+        ( ViewingPoll viewingPlayerModel.poll, Cmd.none )
+      _ ->
+        ( model, Cmd.none )
 
-pollDisplayContent : Model -> E.Element PollDisplaySubmsg
+pollDisplayContent : Model -> E.Element Msg
 pollDisplayContent model =
   E.column
     [ E.spacing 30 
     , E.width E.fill
     ]
     [ pollHeading model
-    , case model.selectedPlayer of
-        Nothing ->
-          rankingsDisplay model
-        Just _ ->
-          playerDisplay model
+    , case model of
+        ViewingPoll poll ->
+          rankingsDisplay poll
+        ViewingPlayer viewingPlayerModel ->
+          playerDisplay viewingPlayerModel
     ]
 
-rankingsDisplay : Model -> E.Element PollDisplaySubmsg
-rankingsDisplay model =
+rankingsDisplay : Poll.PremierePoll -> E.Element Msg
+rankingsDisplay poll =
   let
-    rankedPlayers = PremierePoll.rankPlayers model.premierePoll
-    cutoff = PremierePoll.numberOfPlayers model.premierePoll
+    rankedPlayers = PremierePoll.rankPlayers poll
+    cutoff = PremierePoll.numberOfPlayers poll
   in
   E.column
     [ E.spacing 50 
@@ -103,11 +127,12 @@ rankingsDisplay model =
 
             ]
           :: (List.map (rankingsDisplayRow cutoff) rankedPlayers)
-
-    , pollDisplayBottomButtons model
+    , pollDisplayBottomButtons
+        "Click player name to see vote distribution"
+        [ chooseAnotherPlayer ]
     ]
 
-rankingsDisplayRow : Int -> PremierePoll.PlayerRanking -> E.Element PollDisplaySubmsg
+rankingsDisplayRow : Int -> PremierePoll.PlayerRanking -> E.Element Msg
 rankingsDisplayRow cutoff p =
   let
     bottomBorderWidth = if p.rank == cutoff then 1 else 0
@@ -146,90 +171,88 @@ rankingsDisplayRow cutoff p =
           ]
     }
 
-playerDisplay : Model -> E.Element PollDisplaySubmsg
+playerDisplay : ViewingPlayerModel -> E.Element Msg
 playerDisplay model =
   E.column
     [ E.spacing 30 ]
     [ voteChart model
     , case model.mouseoverBar of
         Nothing ->
-          pollDisplayBottomButtons model
+          pollDisplayBottomButtons
+            "Click player name to see vote distribution"
+            [ chooseAnotherPlayer
+            , chooseAnotherPoll
+            ]
         _ ->
           E.none
     ]
 
-pollDisplayBottomButtons : Model -> E.Element PollDisplaySubmsg
-pollDisplayBottomButtons model =
-  let
-    instructionsText = 
-      case model.selectedPlayer of
-        Just _ ->
-          "Hover over graph to see votes from individual pollsters"
-        Nothing ->
-          "Click player name to see vote distribution"
-  in
+chooseAnotherPlayer : E.Element Msg
+chooseAnotherPlayer =
+  EI.button
+    [ E.alignRight ]
+    { onPress = Just ClearPlayerMsg
+    , label = E.text "Choose another player ->"
+    }
+
+chooseAnotherPoll : E.Element msg
+chooseAnotherPoll =
+  E.link
+    [ E.alignRight ]
+    { url = "/"
+    , label = E.text "Choose another poll ->"
+    }
+
+pollDisplayBottomButtons : String -> List (E.Element Msg) -> E.Element Msg
+pollDisplayBottomButtons instructions buttons =
   E.column
     [ E.alignRight ]
-    [ E.el
-        [ Font.italic 
-        , Font.size 14
-        , E.paddingEach { edges | bottom = 5 }
-        ]
-        <| E.text instructionsText
-    , case model.selectedPlayer of 
-        Just _ ->
-          EI.button
-            [ E.alignRight ]
-            { onPress = Just ClearPlayerMsg
-            , label = E.text "Choose another player ->"
-            }
-        Nothing ->
-          E.none
-    , E.link
-        [ E.alignRight ]
-        { url = "/"
-        , label = E.text "Choose another poll ->"
-        }
-
-    ]
+    <|  ( E.el
+          [ Font.italic 
+          , Font.size 14
+          , E.paddingEach { edges | bottom = 5 }
+          ]
+          <| E.text instructions )
+          :: buttons
 
 
 pollHeading : Model -> E.Element msg
 pollHeading model =
   let
-    monthText =
-      Maybe.withDefault "?" (Poll.getLongMonthName model.premierePoll.month)
+    poll =
+      case model of
+        ViewingPoll p ->
+          p
+        ViewingPlayer viewingPlayerModel ->
+          viewingPlayerModel.poll
+          
   in
   E.column
     [ E.width E.fill ]
     [ E.el
         [ Font.size 30 ]
-        <| case model.selectedPlayer of
-            Just p ->
-              E.text p
-            Nothing ->
+        <| case model of
+            ViewingPlayer viewingPlayerModel ->
+              E.text viewingPlayerModel.player
+            _ ->
               E.none
     , E.text
-        (  monthText
+        (  (Maybe.withDefault "?" (Poll.getLongMonthName poll.month) )
         ++ " "
-        ++ String.fromInt model.premierePoll.year
+        ++ String.fromInt poll.year
         ++ " "
-        ++ Poll.disciplineToString model.premierePoll.discipline
+        ++ Poll.disciplineToString poll.discipline
         ++ " Poll"
         )
     ]
 
-voteChart : Model -> E.Element PollDisplaySubmsg
+voteChart : ViewingPlayerModel -> E.Element Msg
 voteChart model =
   let
-    numberofPlayers = Poll.numberOfPlayers model.premierePoll
+    numberofPlayers = Poll.numberOfPlayers model.poll
     votes =
-      case model.selectedPlayer of
-          Just player ->
-            Poll.collectPlayerVotes player model.premierePoll.ballots 
-              |> List.map List.length
-          _ ->
-            List.repeat numberofPlayers 0
+      Poll.collectPlayerVotes model.player model.poll.ballots 
+        |> List.map List.length
     barWidth = 500 // numberofPlayers
   in
   E.column
@@ -270,7 +293,7 @@ voteChart model =
           E.none
     ]
 
-graphBar : Model -> Int -> Int -> Int -> S.Svg msg
+graphBar : ViewingPlayerModel -> Int -> Int -> Int -> S.Svg msg
 graphBar model width index votes =
   S.rect
     [ SA.x <| String.fromInt (5 + (index * width))
@@ -281,7 +304,7 @@ graphBar model width index votes =
     ]
     []
 
-graphBarHitbox : Model -> Int -> Int -> Int -> Int -> E.Element PollDisplaySubmsg
+graphBarHitbox : ViewingPlayerModel -> Int -> Int -> Int -> Int -> E.Element Msg
 graphBarHitbox model width height index votes =
   E.el
     [ E.width <| E.px width
@@ -298,13 +321,13 @@ graphBarHitbox model width height index votes =
     ]
     E.none
 
-graphBarTooltip : Model -> E.Element msg
+graphBarTooltip : ViewingPlayerModel -> E.Element msg
 graphBarTooltip model =
-  case (model.mouseoverBar, model.selectedPlayer) of
-      (Just x, Just p) ->
+  case model.mouseoverBar of
+      Just x ->
         let
-          voters = model.premierePoll.ballots
-            |> Poll.collectPlayerVotes p
+          voters = model.poll.ballots
+            |> Poll.collectPlayerVotes model.player
             |> Array.fromList
             |> Array.get (x - 1)
         in
