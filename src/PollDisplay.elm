@@ -109,14 +109,15 @@ pollHeading poll =
 voteChart : Model -> E.Element PollDisplaySubmsg
 voteChart model =
   let
+    numberofPlayers = Poll.numberOfPlayers model.premierePoll
     votes =
       case model.selectedPlayer of
           Just player ->
             Poll.collectPlayerVotes player model.premierePoll.ballots 
               |> List.map List.length
           _ ->
-            List.repeat 25 0
-    barWidth = 20
+            List.repeat numberofPlayers 0
+    barWidth = 500 // numberofPlayers
   in
   E.column
     [ E.inFront
@@ -150,7 +151,7 @@ voteChart model =
            [ E.paddingXY 5 5, E.width E.fill ]
            [ E.el [ E.alignLeft ] <| E.text "1"
            , E.el [ E.centerX ] <| E.text "Rank"
-           , E.el [ E.alignRight ] <| E.text "25"
+           , E.el [ E.alignRight ] <| E.text (String.fromInt numberofPlayers)
            ]
         _ ->
           E.none

@@ -9,7 +9,7 @@ module PremierePoll exposing
   , parseBallotData
   , getPlayerNames
   , getLongMonthName
-  , playersInPoll
+  , numberOfPlayers
   , getYearsWithDiscipline
   , getMonthsWithDisciplineAndYear
   , toUrlString
@@ -48,9 +48,12 @@ findPoll discipline year month polls =
 
   
 
-playersInPoll : PremierePoll -> Int
-playersInPoll poll =
-  List.length poll.ballots
+numberOfPlayers : PremierePoll -> Int
+numberOfPlayers poll =
+  poll.ballots
+    |> List.map (\b -> List.length b.votes)
+    |> List.maximum
+    |> Maybe.withDefault 25
 
 disciplineToString : Discipline -> String
 disciplineToString discipline =
@@ -86,7 +89,6 @@ addPlayerVote player ballot existingVotes =
 pushVoter : String -> String -> String -> List String -> List String
 pushVoter voter player vote existingVoters =
   if player == vote then voter :: existingVoters else existingVoters
-
 
 parseBallotData : String -> List Ballot
 parseBallotData = 

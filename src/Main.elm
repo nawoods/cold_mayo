@@ -253,10 +253,4 @@ viewErrorContent errorText =
        { url = "/"
        , label = E.text "Go again ->"
        }
-      
     ]
-
-
-
-
-
