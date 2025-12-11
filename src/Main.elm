@@ -8,7 +8,8 @@ import Url.Parser as P exposing ((</>))
 
 import Element as E
 import Element.Font as Font
-import Colors.Opaque exposing (red, cornflowerblue)
+import Element.Background as Background
+import Colors.Opaque exposing (orange, cornflowerblue, white)
 
 import PremierePoll as Poll
 import PremierePoll.Data as PollData
@@ -187,39 +188,52 @@ body model =
     (E.column
       [ E.width E.fill, E.height E.fill ]
       [ E.column 
-          [ E.centerX
-          , E.width (E.px 585)
-          , E.spacing 40
-          , E.padding 40 
-          , Font.size 18
-          ]
-          [ title
-          , content model
-          ]
+        [ E.width E.fill ]
+        [ title
+        , E.el
+            [ E.centerX
+            , E.width (E.px 585)
+            , E.padding 40 
+            , Font.size 18
+            ]
+            (content model)
+        ]
       , footer
       ]
     )
 
 title : E.Element msg
 title =
-  E.column
-  []
-  [ E.el [Font.size 24] <| E.text "Cold Mayo"
-  , E.el [Font.size 16] <| E.text "A delicious plant-based spread for Nestris enthusiasts"
-  ]
+  E.el
+    [ Font.color white
+    , Background.color cornflowerblue
+    , E.width E.fill
+    ]
+    <| E.column
+        [ E.paddingXY 40 20 ]
+        [ E.el [Font.size 24] <| E.text "Cold Mayo"
+        , E.el [Font.size 16] <| E.text "A delicious plant-based spread for Nestris enthusiasts"
+        ]
 
 footer : E.Element msg
 footer =
   E.el 
   [ E.alignBottom
   , E.alignRight 
+  , E.width E.fill
   , E.padding 10
   , Font.size 16
+  , Background.color cornflowerblue
+  , Font.color white
   ] 
   <| E.paragraph 
-    [] 
+    [ Font.alignRight
+    ] 
     [ E.text "Put together by Nick \"arbaro\" Woods of NES Tetris fame. View the source code "
-    , E.link [ Font.color cornflowerblue ] { url = "https://github.com/nawoods/cold_mayo", label = E.text "here" }
+    , E.link 
+        -- [ Font.color cornflowerblue ] 
+        [ Font.underline ]
+        { url = "https://github.com/nawoods/cold_mayo", label = E.text "here" }
     , E.text "."
     ]
 
@@ -245,7 +259,10 @@ viewErrorContent errorText =
     , E.width E.fill
     ]
     [ E.el
-       [ Font.color red ]
+       [ Font.color white 
+       , Background.color orange
+       , E.padding 5
+       ]
        (E.text errorText)
     , E.link
        [ E.alignRight 

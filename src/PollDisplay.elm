@@ -16,12 +16,19 @@ import Element.Font as Font
 import Svg as S
 import Svg.Attributes as SA
 
+import Colors.Opaque exposing (cornflowerblue, black)
+
 import PremierePoll
 import Element.Border as Border
 
 type Model
-  = ViewingPoll Poll.PremierePoll
+  = ViewingPoll ViewingPollModel
   | ViewingPlayer ViewingPlayerModel
+
+type alias ViewingPollModel =
+  { poll : Poll.PremierePoll
+  , mouseoverPlayer : Maybe String
+  }
 
 type alias ViewingPlayerModel =
   { poll : Poll.PremierePoll
@@ -30,13 +37,20 @@ type alias ViewingPlayerModel =
   }
 
 init : Poll.PremierePoll -> Model
-init p = ViewingPoll p
+init p = 
+  ViewingPoll
+    { poll = p 
+    , mouseoverPlayer = Nothing
+    }
+          
 
 type Msg
   = ChoosePlayerMsg String
   | ClearPlayerMsg
   | GraphBarMouseEnterMsg Bool Int
   | GraphBarMouseLeaveMsg
+  | PlayerMouseEnterMsg String
+  | PlayerMouseLeaveMsg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update subMsg model =
@@ -65,9 +79,9 @@ update subMsg model =
           ( model, Cmd.none )
     ChoosePlayerMsg player ->
       case model of
-        ViewingPoll poll ->
+        ViewingPoll viewingPollModel ->
           ( ViewingPlayer
-              { poll = poll
+              { poll = viewingPollModel.poll
               , player = player
               , mouseoverBar = Nothing
               }
@@ -81,10 +95,33 @@ update subMsg model =
           )
     ClearPlayerMsg ->
       case model of
-      ViewingPlayer viewingPlayerModel ->
-        ( ViewingPoll viewingPlayerModel.poll, Cmd.none )
-      _ ->
-        ( model, Cmd.none )
+        ViewingPlayer viewingPlayerModel ->
+          ( init viewingPlayerModel.poll, Cmd.none )
+        _ ->
+          ( model, Cmd.none )
+    PlayerMouseEnterMsg player ->
+      case model of
+        ViewingPoll viewingPollModel ->
+          ( ViewingPoll
+              { viewingPollModel
+                  | mouseoverPlayer = Just player
+              }
+          , Cmd.none
+          )
+        _ ->
+          ( model, Cmd.none )
+    PlayerMouseLeaveMsg ->
+      case model of
+        ViewingPoll viewingPollModel ->
+          ( ViewingPoll
+              { viewingPollModel
+                  | mouseoverPlayer = Nothing
+              }
+          , Cmd.none
+          )
+        _ ->
+          ( model, Cmd.none )
+      
 
 pollDisplayContent : Model -> E.Element Msg
 pollDisplayContent model =
@@ -94,17 +131,16 @@ pollDisplayContent model =
     ]
     [ pollHeading model
     , case model of
-        ViewingPoll poll ->
-          rankingsDisplay poll
+        ViewingPoll viewingPollModel ->
+          rankingsDisplay viewingPollModel
         ViewingPlayer viewingPlayerModel ->
           playerDisplay viewingPlayerModel
     ]
 
-rankingsDisplay : Poll.PremierePoll -> E.Element Msg
-rankingsDisplay poll =
+rankingsDisplay : ViewingPollModel -> E.Element Msg
+rankingsDisplay model =
   let
-    rankedPlayers = PremierePoll.rankPlayers poll
-    cutoff = PremierePoll.numberOfPlayers poll
+    rankedPlayers = PremierePoll.rankPlayers model.poll
   in
   E.column
     [ E.spacing 50 
@@ -126,17 +162,24 @@ rankingsDisplay poll =
               (E.text "Points")
 
             ]
-          :: (List.map (rankingsDisplayRow cutoff) rankedPlayers)
+          :: (List.map (rankingsDisplayRow model) rankedPlayers)
     , pollDisplayBottomButtons
         "Click player name to see vote distribution"
-        [ chooseAnotherPlayer ]
+        [ chooseAnotherPoll ]
     ]
 
-rankingsDisplayRow : Int -> PremierePoll.PlayerRanking -> E.Element Msg
-rankingsDisplayRow cutoff p =
+rankingsDisplayRow : ViewingPollModel -> PremierePoll.PlayerRanking -> E.Element Msg
+rankingsDisplayRow model p =
   let
+    cutoff = PremierePoll.numberOfPlayers model.poll
     bottomBorderWidth = if p.rank == cutoff then 1 else 0
     topPadding = if p.rank == cutoff + 1 then 3 else 0
+    playerFontColor =
+      if model.mouseoverPlayer == Just p.player
+      then
+        cornflowerblue
+      else
+        black
   in
   EI.button
     []
@@ -147,6 +190,8 @@ rankingsDisplayRow cutoff p =
           , Border.dashed
           , Border.widthEach { edges | bottom = bottomBorderWidth }
           , E.paddingEach { edges | top = topPadding }
+          , EE.onMouseEnter (PlayerMouseEnterMsg p.player)
+          , EE.onMouseLeave PlayerMouseLeaveMsg
           ]
           [ E.el 
             [ E.width (E.px 20)
@@ -161,6 +206,7 @@ rankingsDisplayRow cutoff p =
           , E.el 
             [ E.paddingEach { edges | left = 20 } 
             , E.width (E.px 200)
+            , Font.color playerFontColor
             ] 
             <| E.text p.player
           , E.el 
@@ -212,7 +258,10 @@ pollDisplayBottomButtons instructions buttons =
           , Font.size 14
           , E.paddingEach { edges | bottom = 5 }
           ]
-          <| E.text instructions )
+          <| E.el
+              [ Font.color cornflowerblue ]
+              ( E.text instructions )
+        )
           :: buttons
 
 
@@ -221,8 +270,8 @@ pollHeading model =
   let
     poll =
       case model of
-        ViewingPoll p ->
-          p
+        ViewingPoll viewingPollModel ->
+          viewingPollModel.poll
         ViewingPlayer viewingPlayerModel ->
           viewingPlayerModel.poll
           
