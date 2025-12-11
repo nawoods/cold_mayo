@@ -39,7 +39,7 @@ init p =
 
 type PollDisplaySubmsg =
   PlayerDropdownMsg (Dropdown.Msg String)
-  | GraphBarMouseEnterMsg Int
+  | GraphBarMouseEnterMsg Bool Int
   | GraphBarMouseLeaveMsg
 
 update : PollDisplaySubmsg -> Model -> ( Model, Cmd PollDisplaySubmsg )
@@ -64,10 +64,14 @@ update subMsg viewGraphModel =
         , Cmd.map PlayerDropdownMsg cmd
 
       )
-    GraphBarMouseEnterMsg bar ->
-       ( { viewGraphModel | mouseoverBar = Just bar }, Cmd.none )
+    GraphBarMouseEnterMsg bool bar ->
+      ( { viewGraphModel 
+            | mouseoverBar = if bool then Just bar else Nothing 
+        }
+      , Cmd.none 
+      )
     GraphBarMouseLeaveMsg ->
-       ( { viewGraphModel | mouseoverBar = Nothing }, Cmd.none )
+      ( { viewGraphModel | mouseoverBar = Nothing }, Cmd.none )
 
 pollDisplayContent : Model -> E.Element PollDisplaySubmsg
 pollDisplayContent model =
@@ -112,13 +116,34 @@ voteChart model =
               |> List.map List.length
           _ ->
             List.repeat 25 0
+    barWidth = 20
   in
   E.column
-    []
-    [ E.row
-      []
-      (lineVert :: List.map2 (graphBar model) (List.range 1 25) votes)
-    , lineHoriz
+    [ E.inFront
+       <| E.row
+          [ E.paddingEach { edges | right = 5 } ]
+          <| List.indexedMap (graphBarHitbox model barWidth 250) votes
+    ]
+    [ elsvg
+      [ SA.width "505"
+      , SA.height "255"
+      ]
+      <| List.append
+          (List.indexedMap (graphBar model barWidth) votes)
+          [ S.rect
+            [ SA.width "5" 
+            , SA.height "100%"
+            , SA.fill "black"
+            ]
+            []
+          , S.rect
+            [ SA.x "0"
+            , SA.y "250"
+            , SA.width "100%"
+            , SA.height "5"
+            ]
+            []
+          ]
     , case model.mouseoverBar of
         Nothing ->
           E.row
@@ -131,20 +156,33 @@ voteChart model =
           E.none
     ]
 
-graphBar : Model -> Int -> Int -> E.Element PollDisplaySubmsg
-graphBar model col votes = 
-  let
-    sel = Just col == model.mouseoverBar
-    addInfoBox = (\xs -> if sel then (E.below (graphBarTooltip model)) :: xs else xs)
-  in
-  E.el 
-    (addInfoBox
-      [ E.alignBottom 
-      , EE.onMouseEnter (GraphBarMouseEnterMsg col)
-      , EE.onMouseLeave GraphBarMouseLeaveMsg
-      ] 
-    )
-    (svgRect sel 20 votes)
+graphBar : Model -> Int -> Int -> Int -> S.Svg msg
+graphBar model width index votes =
+  S.rect
+    [ SA.x <| String.fromInt (5 + (index * width))
+    , SA.y <| String.fromInt (250 - (votes * 10))
+    , SA.height <| String.fromInt (votes * 10)
+    , SA.width <| String.fromInt width
+    , SA.fill <| if Just (index + 1) == model.mouseoverBar then "orange" else "cornflowerblue"
+    ]
+    []
+
+graphBarHitbox : Model -> Int -> Int -> Int -> Int -> E.Element PollDisplaySubmsg
+graphBarHitbox model width height index votes =
+  E.el
+    [ E.width <| E.px width
+    , E.height <| E.px height
+    , EE.onMouseEnter <| GraphBarMouseEnterMsg (votes /= 0) (index + 1)
+    , EE.onMouseLeave GraphBarMouseLeaveMsg
+    , E.below <| 
+        if
+          model.mouseoverBar == Just (index + 1)
+        then 
+          graphBarTooltip model
+        else
+          E.none
+    ]
+    E.none
 
 graphBarTooltip : Model -> E.Element msg
 graphBarTooltip model =
@@ -187,53 +225,6 @@ playerDropdown dropdown =
 
 elsvg : List (S.Attribute msg) -> List (S.Svg msg) -> E.Element msg
 elsvg xs ys = S.svg xs ys |> E.html
-
-svgRect : Bool -> Int -> Int -> E.Element msg
-svgRect sel ln ht =
-  elsvg
-    [ SA.width <| String.fromInt ln
-    , SA.height <| String.fromInt <| 10 * ht
-    ]
-    [ S.rect
-        [ SA.width "100%" 
-        , SA.height "100%"
-        , SA.fill ( if sel then "orange" else "cornflowerblue" )
-        ]
-        []
-    ]
-
-
-
-lineVert : E.Element msg
-lineVert = 
-  elsvg
-    [ SA.width "5" 
-    , SA.height "250"
-    ]
-    [ S.rect
-        [ SA.width "100%" 
-        , SA.height "100%"
-        , SA.fill "black"
-      ]
-      []
-    ]
-
-lineHoriz : E.Element msg
-lineHoriz =
-  elsvg
-    [ SA.width "505" 
-    , SA.height "5"
-    ]
-    [ S.rect
-        [ SA.width "100%" 
-        , SA.height "100%"
-        , SA.fill "black"
-      ]
-      []
-    ]
-
-
-
       
 ordinal : Int -> String
 ordinal x =
@@ -253,3 +244,11 @@ ordinal x =
                 _ ->
                   "th"
   in String.fromInt x ++ suffix
+
+edges : { top : number, right : number, left : number, bottom : number }
+edges = 
+ { top = 0
+ , right = 0
+ , left = 0
+ , bottom = 0
+ }
