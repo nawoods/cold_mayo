@@ -2,14 +2,17 @@ module PremierePoll exposing
   ( PremierePoll
   , Discipline (..)
   , Ballot
+  , PlayerRanking
   , findPoll
   , disciplineToString
   , disciplineFromString
   , collectPlayerVotes
+  , computePlayerPoints
   , parseBallotData
   , getPlayerNames
   , getLongMonthName
   , numberOfPlayers
+  , rankPlayers
   , getYearsWithDiscipline
   , getMonthsWithDisciplineAndYear
   , toUrlString
@@ -36,6 +39,12 @@ type alias Ballot =
   ,  votes : List String
   }
 
+type alias PlayerRanking =
+  { player: String
+  , rank: Int
+  , points: Int
+  }
+
 findPoll : Discipline -> Int -> Int -> List PremierePoll -> Maybe PremierePoll
 findPoll discipline year month polls =
   polls
@@ -49,11 +58,15 @@ findPoll discipline year month polls =
   
 
 numberOfPlayers : PremierePoll -> Int
-numberOfPlayers poll =
-  poll.ballots
-    |> List.map (\b -> List.length b.votes)
-    |> List.maximum
-    |> Maybe.withDefault 25
+numberOfPlayers =
+  .ballots
+  >> maxPlayersInBallots
+
+maxPlayersInBallots : List Ballot -> Int
+maxPlayersInBallots =
+    List.map (\b -> List.length b.votes)
+    >> List.maximum
+    >> Maybe.withDefault 25
 
 disciplineToString : Discipline -> String
 disciplineToString discipline =
@@ -89,6 +102,25 @@ addPlayerVote player ballot existingVotes =
 pushVoter : String -> String -> String -> List String -> List String
 pushVoter voter player vote existingVoters =
   if player == vote then voter :: existingVoters else existingVoters
+
+computePlayerPoints : String -> PremierePoll -> Int
+computePlayerPoints player poll = 
+  (collectPlayerVotes player poll.ballots)
+    |> List.indexedMap (\i v -> (numberOfPlayers poll - i, List.length v))
+    |> List.foldl (\(pts, votes) acc -> acc + (pts * votes)) 0
+
+rankPlayers : PremierePoll -> List PlayerRanking
+rankPlayers poll =
+  let
+    names = getPlayerNames poll.ballots
+  in
+  List.map (\n -> computePlayerPoints n poll) names
+    |> List.map2 Tuple.pair names 
+    |> List.sortBy Tuple.second
+    |> List.reverse
+    |> List.map2 
+         (\rank (player, points) -> { rank = rank, player = player, points = points})
+         (List.range 1 (List.length names))
 
 parseBallotData : String -> List Ballot
 parseBallotData = 
