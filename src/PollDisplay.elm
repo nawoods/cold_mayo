@@ -225,7 +225,7 @@ playerDisplay model =
     , case model.mouseoverBar of
         Nothing ->
           pollDisplayBottomButtons
-            "Click player name to see vote distribution"
+            "Hover over graph to see votes from individual pollsters"
             [ chooseAnotherPlayer
             , chooseAnotherPoll
             ]
