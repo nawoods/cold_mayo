@@ -244,7 +244,7 @@ content model =
       SelectionFlow.selectionPollContent selectionFlowModel
         |> E.map SelectionFlowMsg
     PollDisplay viewGraphModel ->
-      PollDisplay.pollDisplayContent viewGraphModel
+      PollDisplay.view viewGraphModel
         |> E.map PollDisplayMsg
     Error errorText ->
       viewErrorContent errorText

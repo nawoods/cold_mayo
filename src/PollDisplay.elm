@@ -3,18 +3,15 @@ module PollDisplay exposing
   , Msg
   , init
   , update
-  , pollDisplayContent
+  , view
   )
 import PremierePoll as Poll
-
-import Array
+import Graph
 
 import Element as E
 import Element.Events as EE
 import Element.Input as EI
 import Element.Font as Font
-import Svg as S
-import Svg.Attributes as SA
 
 import Colors.Opaque exposing (cornflowerblue, black)
 
@@ -33,7 +30,7 @@ type alias ViewingPollModel =
 type alias ViewingPlayerModel =
   { poll : Poll.PremierePoll
   , player : String
-  , mouseoverBar : Maybe Int
+  , graph : Graph.Model
   }
 
 init : Poll.PremierePoll -> Model
@@ -50,46 +47,41 @@ getPoll model =
       viewingPollModel.poll
     ViewingPlayer viewingPlayerModel ->
       viewingPlayerModel.poll
+
+getPlayer : ViewingPlayerModel -> String
+getPlayer model = model.player
+
+getGraph : ViewingPlayerModel -> Graph.Model
+getGraph model = model.graph
+
+setGraph : Graph.Model -> ViewingPlayerModel -> ViewingPlayerModel
+setGraph graph model = { model | graph = graph }
+
+getMouseOverBar : ViewingPlayerModel -> Maybe Int
+getMouseOverBar model =
+  model
+    |> getGraph
+    |> Graph.getMouseOverBar
           
 
 type Msg
   = ChoosePlayerMsg String
   | ClearPlayerMsg
-  | GraphBarMouseEnterMsg Bool Int
-  | GraphBarMouseLeaveMsg
   | PlayerMouseEnterMsg String
   | PlayerMouseLeaveMsg
+  | GraphMsg Graph.Msg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update subMsg model =
-  case subMsg of
-    GraphBarMouseEnterMsg bool bar ->
-      case model of
-        ViewingPlayer viewingPlayerModel ->
-          ( ViewingPlayer
-            { viewingPlayerModel 
-                | mouseoverBar = if bool then Just bar else Nothing 
-            }
-          , Cmd.none 
-          )
-        _ ->
-          ( model, Cmd.none )
-    GraphBarMouseLeaveMsg ->
-      case model of
-        ViewingPlayer viewingPlayerModel ->
-          ( ViewingPlayer
-            { viewingPlayerModel 
-                | mouseoverBar = Nothing
-            }
-          , Cmd.none 
-          )
-        _ ->
-          ( model, Cmd.none )
+update msg model =
+  let
+    poll = getPoll model
+  in
+  case msg of
     ChoosePlayerMsg player ->
       ( ViewingPlayer
-          { poll = getPoll model
+          { poll = poll
           , player = player
-          , mouseoverBar = Nothing
+          , graph = Graph.init poll player
           }
       , Cmd.none )
     ClearPlayerMsg ->
@@ -120,10 +112,22 @@ update subMsg model =
           )
         _ ->
           ( model, Cmd.none )
+    GraphMsg subMsg ->
+      case model of
+        ViewingPlayer viewingPlayerModel ->
+          let
+            ( graphModel, graphCmd ) = Graph.update subMsg (getGraph viewingPlayerModel)
+          in
+            ( ViewingPlayer (setGraph graphModel viewingPlayerModel)
+            , Cmd.map GraphMsg graphCmd
+            )
+          
+        _ ->
+          ( model, Cmd.none )
       
 
-pollDisplayContent : Model -> E.Element Msg
-pollDisplayContent model =
+view : Model -> E.Element Msg
+view model =
   E.column
     [ E.spacing 30 
     , E.width E.fill
@@ -220,8 +224,11 @@ playerDisplay : ViewingPlayerModel -> E.Element Msg
 playerDisplay model =
   E.column
     [ E.spacing 30 ]
-    [ voteChart model
-    , case model.mouseoverBar of
+    [ model
+        |> getGraph
+        |> Graph.view
+        |> E.map GraphMsg
+    , case (getMouseOverBar model) of
         Nothing ->
           pollDisplayBottomButtons
             "Hover over graph to see votes from individual pollsters"
@@ -289,134 +296,8 @@ pollHeading model =
         )
     ]
 
-voteChart : ViewingPlayerModel -> E.Element Msg
-voteChart model =
-  let
-    numberofPlayers = Poll.numberOfPlayers model.poll
-    votes =
-      Poll.collectPlayerVotes model.player model.poll.ballots 
-        |> List.map List.length
-    barWidth = 500 // numberofPlayers
-  in
-  E.column
-    [ E.inFront
-       <| E.row
-          [ E.paddingEach { edges | right = 5 } ]
-          <| List.indexedMap (graphBarHitbox model barWidth 250) votes
-    ]
-    [ elsvg
-      [ SA.width "505"
-      , SA.height "255"
-      ]
-      <| List.append
-          (List.indexedMap (graphBar model barWidth) votes)
-          [ S.rect
-            [ SA.width "5" 
-            , SA.height "100%"
-            , SA.fill "black"
-            ]
-            []
-          , S.rect
-            [ SA.x "0"
-            , SA.y "250"
-            , SA.width "100%"
-            , SA.height "5"
-            ]
-            []
-          ]
-    , case model.mouseoverBar of
-        Nothing ->
-          E.row
-           [ E.paddingXY 5 5, E.width E.fill ]
-           [ E.el [ E.alignLeft ] <| E.text "1"
-           , E.el [ E.centerX ] <| E.text "Rank"
-           , E.el [ E.alignRight ] <| E.text (String.fromInt numberofPlayers)
-           ]
-        _ ->
-          E.none
-    ]
 
-graphBar : ViewingPlayerModel -> Int -> Int -> Int -> S.Svg msg
-graphBar model width index votes =
-  S.rect
-    [ SA.x <| String.fromInt (5 + (index * width))
-    , SA.y <| String.fromInt (250 - (votes * 10))
-    , SA.height <| String.fromInt (votes * 10)
-    , SA.width <| String.fromInt width
-    , SA.fill <| if Just (index + 1) == model.mouseoverBar then "orange" else "cornflowerblue"
-    ]
-    []
 
-graphBarHitbox : ViewingPlayerModel -> Int -> Int -> Int -> Int -> E.Element Msg
-graphBarHitbox model width height index votes =
-  E.el
-    [ E.width <| E.px width
-    , E.height <| E.px height
-    , EE.onMouseEnter <| GraphBarMouseEnterMsg (votes /= 0) (index + 1)
-    , EE.onMouseLeave GraphBarMouseLeaveMsg
-    , E.below <| 
-        if
-          model.mouseoverBar == Just (index + 1)
-        then 
-          graphBarTooltip model
-        else
-          E.none
-    ]
-    E.none
-
-graphBarTooltip : ViewingPlayerModel -> E.Element msg
-graphBarTooltip model =
-  case model.mouseoverBar of
-      Just x ->
-        let
-          voters = model.poll.ballots
-            |> Poll.collectPlayerVotes model.player
-            |> Array.fromList
-            |> Array.get (x - 1)
-        in
-        case voters of
-            Just v ->
-              E.column
-                [ E.paddingXY 0 10 ]
-                [ E.text ("Ranked " 
-                    ++ ordinal x 
-                    ++ " by " 
-                    ++ (v |> List.length |> String.fromInt)
-                    ++ " pollster"
-                    ++ if List.length v == 1 then "" else "s"
-                  ),
-                  E.column
-                  [ Font.size 14 ]
-                  ( v |> List.sort
-                      |> List.map (\a -> E.text a) 
-                  )
-                ]
-            _ ->
-              E.none
-      _ ->
-        E.none
-
-elsvg : List (S.Attribute msg) -> List (S.Svg msg) -> E.Element msg
-elsvg xs ys = S.svg xs ys |> E.html
-      
-ordinal : Int -> String
-ordinal x =
-  let 
-    suffix =
-      case x // 10 of
-          1 ->
-            "th"
-          _ ->
-            case modBy 10 x of
-                1 ->
-                  "st"
-                2 ->
-                  "nd"
-                3 ->
-                  "rd"
-                _ ->
-                  "th"
-  in String.fromInt x ++ suffix
 
 edges : { top : number, right : number, left : number, bottom : number }
 edges = 
